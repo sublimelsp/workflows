@@ -61,8 +61,6 @@ jobs:
           VERSION: ${{ inputs.version_regexp }}
         run: echo "version=$(rg -o "$VERSION" -r "\$1" "$FILE")" >> "$GITHUB_OUTPUT"
 
-      - run: echo '${{ toJson(github.event)  }}'
-
       - name: Checkout workflow repo
         uses: actions/checkout@v6
         with:
