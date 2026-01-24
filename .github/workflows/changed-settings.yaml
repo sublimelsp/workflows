@@ -61,7 +61,8 @@ jobs:
           VERSION: ${{ inputs.version_regexp }}
         run: echo "version=$(rg -o "$VERSION" -r "\$1" "$FILE")" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout workflow repo
+      - if: steps.tag-from.outputs.version != steps.tag-to.outputs.version
+        name: Checkout workflow repo
         uses: actions/checkout@v6
         with:
           repository: sublimelsp/workflows

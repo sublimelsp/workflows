@@ -8,6 +8,7 @@ from urllib.request import urlopen
 import argparse
 import difflib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -27,7 +28,7 @@ type ConfigurationsDict = dict[str, Configuration]
 
 def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: str) -> Path:
     archive_url = f'{repository_url}/archive/{tag}.zip'
-    zip_path = Path(target_dir, f'archive-{tag}.zip')
+    zip_path = Path(target_dir, f'archive-{re.sub(r'[<>:"/\\|?*]', '_', tag)}.zip')
 
     with urlopen(archive_url) as response, Path.open(zip_path, 'wb') as out_file:  # noqa: S310
         shutil.copyfileobj(response, out_file)
