@@ -15,7 +15,7 @@ on:
         description: The JQ query to use to retrieve configuration settings.
         required: false
         type: string
-        default: '.contributes.configuration[]'
+        default: '.contributes.configuration.properties'
       version_file:
         description: Relative path to the file that contains version information
         required: true
