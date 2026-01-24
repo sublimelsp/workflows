@@ -2,7 +2,7 @@
 
 """Prints differences in server settings between two tags."""
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, TypedDict, cast
 from urllib.request import urlopen
 import argparse
@@ -36,15 +36,20 @@ def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: s
     return zip_path
 
 
-def extract_configuration_file(zip_path: Path, configuration_path: str, target_dir: str) -> Path:
+def read_configuration_file(zip_path: Path, configuration_path: str, target_dir: str) -> str:
     with zipfile.ZipFile(zip_path, 'r') as zip_file:
-        parent_name = get_parent_directory(zip_file)
-        archive_configuration_path = str(Path(parent_name, configuration_path)) if parent_name else configuration_path
-        filepath = next((p for p in zip_file.namelist() if archive_configuration_path == p), None)
-        if not filepath:
+        configuration = read_file_from_zip(zip_file, configuration_path, target_dir)
+        if configuration is None:
             print(f'Archive does not contain expected file {configuration_path}')
             sys.exit(1)
-        return Path(zip_file.extract(filepath, target_dir))
+        # Optionally get translation file and update string references.
+        translations_path = str(PurePosixPath(configuration_path).with_suffix('.nls.json'))
+        translations = read_file_from_zip(zip_file, translations_path, target_dir)
+        if translations:
+            translations_json: dict[str, str] = json.loads(translations)
+            for key, value in translations_json.items():
+                configuration = configuration.replace(f'"%{key}%"', json_serialize(value))
+        return configuration
 
 
 def get_parent_directory(zip_file: zipfile.ZipFile) -> str | None:
@@ -66,6 +71,18 @@ def get_parent_directory(zip_file: zipfile.ZipFile) -> str | None:
     # If there's only one top-level entry, all files share a parent
     return top_levels.pop() if len(top_levels) == 1 else None
 
+
+def read_file_from_zip(zip_file: zipfile.ZipFile, path: str, target_dir: str) -> str | None:
+    parent_name = get_parent_directory(zip_file)
+    archive_path = f'{parent_name}/{path}' if parent_name else path
+    filepath = next((p for p in zip_file.namelist() if archive_path == p), None)
+    if not filepath:
+        return None
+    extracted_path = Path(zip_file.extract(filepath, target_dir))
+    contents = ''
+    with extracted_path.open(encoding='utf-8') as f:
+        contents = f.read()
+    return contents
 
 def generate_sublime_settings_markdown(settings: dict[str, Configuration]) -> str:
     sublime_settings: list[str] = []
@@ -137,14 +154,9 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory() as tempdir:
         archive_path_1 = download_github_artifact_by_tag(repository_url, tag_from, tempdir)
-        configuration_path_1 = extract_configuration_file(archive_path_1, configuration_file_path, tempdir)
+        configuration_1 = read_configuration_file(archive_path_1, configuration_file_path, tempdir)
         archive_path_2 = download_github_artifact_by_tag(repository_url, tag_to, tempdir)
-        configuration_path_2 = extract_configuration_file(archive_path_2, configuration_file_path, tempdir)
-
-        with Path.open(configuration_path_1, encoding='utf-8') as f1, \
-                Path.open(configuration_path_2, encoding='utf-8') as f2:
-            configuration_1 = f1.read()
-            configuration_2 = f2.read()
+        configuration_2 = read_configuration_file(archive_path_2, configuration_file_path, tempdir)
 
         diff = '\n'.join(difflib.unified_diff(
             configuration_1.split('\n'),
