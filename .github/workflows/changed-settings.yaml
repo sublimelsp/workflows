@@ -24,6 +24,10 @@ on:
         description: The regexp pattern to extract version from the version file. The first capturing group must contain the released version tag present in repository_url.
         required: true
         type: string
+    outputs:
+      version_changed:
+        description: Set to 'true' if the version has chagned relative to the main branch.
+        value: ${{ jobs.new_settings.outputs.version_changed }}
 
 permissions:
   pull-requests: write
@@ -32,6 +36,9 @@ permissions:
 jobs:
   new_settings:
     runs-on: ubuntu-latest
+
+    outputs:
+      version_changed: ${{ steps.version-check.outputs.version_changed }}
 
     steps:
       - name: Install packages
@@ -61,7 +68,10 @@ jobs:
           VERSION: ${{ inputs.version_regexp }}
         run: echo "version=$(rg -o "$VERSION" -r "\$1" "$FILE")" >> "$GITHUB_OUTPUT"
 
-      - if: steps.tag-from.outputs.version != steps.tag-to.outputs.version
+      - id: version-check
+        run: echo "version_changed=${{ steps.tag-from.outputs.version != steps.tag-to.outputs.version }}" >> "$GITHUB_OUTPUT"
+
+      - if: steps.version-check.outputs.version_changed == 'true'
         name: Checkout workflow repo
         uses: actions/checkout@v6
         with:
@@ -69,7 +79,7 @@ jobs:
           path: workflow-repo
           ref: feat/init
 
-      - if: steps.tag-from.outputs.version != steps.tag-to.outputs.version
+      - if: steps.version-check.version_changed == 'true'
         name: Run new_settings script
         id: new_settings
         env:
@@ -83,7 +93,7 @@ jobs:
             echo EOF
           } >> "$GITHUB_OUTPUT"
 
-      - if: steps.tag-from.outputs.version != steps.tag-to.outputs.version
+      - if: steps.version-check.version_changed == 'true'
         name: Find Comment
         uses: peter-evans/find-comment@v4
         id: find-comment
@@ -91,7 +101,7 @@ jobs:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: 'github-actions[bot]'
 
-      - if: steps.tag-from.outputs.version != steps.tag-to.outputs.version
+      - if: steps.version-check.version_changed == 'true'
         name: Create or update comment
         uses: peter-evans/create-or-update-comment@v5
         with:
