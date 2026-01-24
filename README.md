@@ -19,7 +19,7 @@ jobs:
     uses: sublimelsp/workflows/.github/workflows/new-json-settings.yaml
     with:
       repository_url: 'https://github.com/rust-lang/rust-analyzer'
-      configuration_file_path: '/editors/code/package.json'
+      configuration_file_path: 'editors/code/package.json'
       configuration_jq_query: '.contributes.configuration.properties'
       version_file: 'plugin.py'
       version_regexp: 'TAG = "([^"]+)"'
