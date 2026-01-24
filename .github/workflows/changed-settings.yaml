@@ -26,8 +26,11 @@ on:
         type: string
     outputs:
       version_changed:
-        description: Set to 'true' if the version has chagned relative to the main branch.
+        description: Set to 'true' if version has changed relative to the main branch.
         value: ${{ jobs.new_settings.outputs.version_changed }}
+      new_version:
+        description: Set to the tag of the new version.
+        value: ${{ jobs.new_settings.outputs.new_version }}
 
 permissions:
   pull-requests: write
@@ -39,6 +42,7 @@ jobs:
 
     outputs:
       version_changed: ${{ steps.version-check.outputs.version_changed }}
+      new_version: ${{ steps.tag-to.outputs.version }}
 
     steps:
       - name: Install packages
