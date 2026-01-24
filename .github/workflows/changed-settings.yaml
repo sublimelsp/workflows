@@ -61,9 +61,12 @@ jobs:
           VERSION: ${{ inputs.version_regexp }}
         run: echo "version=$(rg -o "$VERSION" -r "\$1" "$FILE")" >> "$GITHUB_OUTPUT"
 
+      - run: echo '${{ github.repository }}'
+
       - name: Checkout workflow repo
         uses: actions/checkout@v6
         with:
+          repository: ${{ github.repository }}
           path: workflow-repo
           ref: feat/init
 
