@@ -39,7 +39,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ripgrep
 
-      - uses: actions/checkout@v6
+      - name: Checkout PR
+        uses: actions/checkout@v6
 
       - name: Get version from PR
         id: tag-to
@@ -48,7 +49,8 @@ jobs:
           VERSION: ${{ inputs.version_regexp }}
         run: echo "version=$(rg -o "$VERSION" -r "\$1" "$FILE")" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v6
+      - name: Checkout main
+        uses: actions/checkout@v6
         with:
           ref: main
 
@@ -59,11 +61,13 @@ jobs:
           VERSION: ${{ inputs.version_regexp }}
         run: echo "version=$(rg -o "$VERSION" -r "\$1" "$FILE")" >> "$GITHUB_OUTPUT"
 
+      - run: echo ${{ github.event  }}
+
       - name: Checkout workflow repo (self)
         uses: actions/checkout@v6
         with:
-          repository: ${{ github.repository }}
           path: workflow-repo
+          ref: feat/init
 
       - if: steps.tag-from.outputs.version != steps.tag-to.outputs.version
         name: Run new_settings script
