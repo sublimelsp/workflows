@@ -62,6 +62,7 @@ jobs:
       - name: Checkout workflow repo (self)
         uses: actions/checkout@v6
         with:
+          repository: ${{ github.repository }}
           path: workflow-repo
 
       - if: steps.tag-from.outputs.version != steps.tag-to.outputs.version
