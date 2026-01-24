@@ -1,0 +1,96 @@
+name: Check for changed settings
+
+on:
+  workflow_call:
+    inputs:
+      repository_url:
+        description: The github URL to the repository that contains the configuration to check file.
+        required: true
+        type: string
+      configuration_file_path:
+        description: A path to the configuration file relative to the repository_url.
+        required: true
+        type: string
+      configuration_jq_query:
+        description: The JQ query to use to retrieve configuration settings.
+        required: false
+        type: string
+        default: '.contributes.configuration[]'
+      version_file:
+        description: Relative path to the file that contains version information
+        required: true
+        type: string
+      version_regexp:
+        description: The regexp pattern to extract version from the version file. The first capturing group must contain the released version tag present in repository_url.
+        required: true
+        type: string
+
+permissions:
+  pull-requests: write
+  repository-projects: write
+
+jobs:
+  new_settings:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+
+      - name: Get version from PR
+        id: tag-to
+        env:
+          FILE: ${{ inputs.version_file }}
+          VERSION: ${{ inputs.version_regexp }}
+        run: echo "version=$(rg -o $VERSION -r \$1 $FILE)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Get version from main
+        id: tag-from
+        env:
+          FILE: ${{ inputs.version_file }}
+          VERSION: ${{ inputs.version_regexp }}
+        run: echo "version=$(rg -o $VERSION -r \$1 $FILE)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout workflow repo (self)
+        uses: actions/checkout@v6
+        with:
+          path: workflow-repo
+
+      - if: steps.tag-from.outputs.version != steps.tag-to.outputs.version
+        name: Run new_settings script
+        id: new_settings
+        env:
+          REPOSITORY_URL: ${{ inputs.repository_url }}
+          CONFIGURATION_FILE_PATH: ${{ inputs.configuration_file_path }}
+          CONFIGURATION_JQ_QUERY: ${{ inputs.configuration_jq_query }}
+        run: |
+          {
+            echo 'CHANGES<<EOF'
+            ./workflow-repo/scripts/changed_settings.py "$REPOSITORY_URL" "$CONFIGURATION_FILE_PATH" "$CONFIGURATION_JQ_QUERY" ${{ steps.tag-from.outputs.version }} ${{ steps.tag-to.outputs.version }}
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - if: steps.tag-from.outputs.version != steps.tag-to.outputs.version
+        name: Find Comment
+        uses: peter-evans/find-comment@v4
+        id: find-comment
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+
+      - if: steps.tag-from.outputs.version != steps.tag-to.outputs.version
+        name: Create or update comment
+        uses: peter-evans/create-or-update-comment@v5
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: ${{ steps.new_settings.outputs.CHANGES }}
+          edit-mode: replace
