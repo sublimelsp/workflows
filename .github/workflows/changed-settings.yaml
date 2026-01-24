@@ -4,11 +4,11 @@ on:
   workflow_call:
     inputs:
       repository_url:
-        description: The github URL to the repository that contains the configuration to check file.
+        description: The github URL to the repository that contains the configuration to check file. Must not end with a slash.
         required: true
         type: string
       configuration_file_path:
-        description: A path to the configuration file relative to the repository_url.
+        description: A path to the configuration file relative to the repository_url. Must not start with a slash.
         required: true
         type: string
       configuration_jq_query:

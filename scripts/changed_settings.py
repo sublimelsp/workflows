@@ -38,11 +38,33 @@ def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: s
 
 def extract_configuration_file(zip_path: Path, configuration_path: str, target_dir: str) -> Path:
     with zipfile.ZipFile(zip_path, 'r') as zip_file:
-        filepath = next((p for p in zip_file.namelist() if configuration_path in p), None)
+        parent_name = get_parent_directory(zip_file)
+        archive_configuration_path = str(Path(parent_name, configuration_path)) if parent_name else configuration_path
+        filepath = next((p for p in zip_file.namelist() if archive_configuration_path == p), None)
         if not filepath:
             print(f'Archive does not contain expected file {configuration_path}')
             sys.exit(1)
         return Path(zip_file.extract(filepath, target_dir))
+
+
+def get_parent_directory(zip_file: zipfile.ZipFile) -> str | None:
+    """
+    Check if all files in the ZIP are contained within a parent directory.
+    Returns str | None: Common parent name if present.
+    """
+    
+    # Filter out directory entries and get top-level paths.
+    top_levels: set[str] = set()
+    for name in zip_file.namelist():
+        # Skip empty entries
+        if not name:
+            continue
+        # Get the first component of the path
+        top_level = name.split('/')[0]
+        top_levels.add(top_level)
+    
+    # If there's only one top-level entry, all files share a parent
+    return top_levels.pop() if len(top_levels) == 1 else None
 
 
 def generate_sublime_settings_markdown(settings: dict[str, Configuration]) -> str:
@@ -132,7 +154,7 @@ def main() -> None:
             lineterm=''))
 
         output: list[str] = [
-            f'Following are the [settings schema]({repository_url}/blob/{tag_to}{configuration_file_path}) changes between tags `{tag_from}` and `{tag_to}`. Make sure that those are reflected in the package settings and the `sublime-package.json` file.\n'
+            f'Following are the [settings schema]({repository_url}/blob/{tag_to}/{configuration_file_path}) changes between tags `{tag_from}` and `{tag_to}`. Make sure that those are reflected in the package settings and the `sublime-package.json` file.\n'
         ]
 
         if diff:
