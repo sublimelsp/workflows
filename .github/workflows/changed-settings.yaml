@@ -46,7 +46,7 @@ jobs:
         env:
           FILE: ${{ inputs.version_file }}
           VERSION: ${{ inputs.version_regexp }}
-        run: echo "version=$(rg -o $VERSION -r \$1 $FILE)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(rg -o "$VERSION" -r "\$1" "$FILE")" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v6
         with:
@@ -57,7 +57,7 @@ jobs:
         env:
           FILE: ${{ inputs.version_file }}
           VERSION: ${{ inputs.version_regexp }}
-        run: echo "version=$(rg -o $VERSION -r \$1 $FILE)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(rg -o "$VERSION" -r "\$1" "$FILE")" >> "$GITHUB_OUTPUT"
 
       - name: Checkout workflow repo (self)
         uses: actions/checkout@v6
