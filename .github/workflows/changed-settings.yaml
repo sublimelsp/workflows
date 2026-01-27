@@ -81,7 +81,6 @@ jobs:
         with:
           repository: sublimelsp/workflows
           path: workflow-repo
-          ref: feat/init
 
       - if: steps.version-check.version_changed == 'true'
         name: Run new_settings script
