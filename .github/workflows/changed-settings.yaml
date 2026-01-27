@@ -27,17 +27,17 @@ on:
     outputs:
       version_changed:
         description: Set to 'true' if version has changed relative to the main branch.
-        value: ${{ jobs.new_settings.outputs.version_changed }}
+        value: ${{ jobs.changed_settings.outputs.version_changed }}
       new_version:
         description: Set to the tag of the new version.
-        value: ${{ jobs.new_settings.outputs.new_version }}
+        value: ${{ jobs.changed_settings.outputs.new_version }}
 
 permissions:
   pull-requests: write
   repository-projects: write
 
 jobs:
-  new_settings:
+  changed_settings:
     runs-on: ubuntu-latest
 
     outputs:
@@ -83,8 +83,8 @@ jobs:
           path: workflow-repo
 
       - if: steps.version-check.version_changed == 'true'
-        name: Run new_settings script
-        id: new_settings
+        name: Run changed_settings script
+        id: changed_settings
         env:
           REPOSITORY_URL: ${{ inputs.repository_url }}
           CONFIGURATION_FILE_PATH: ${{ inputs.configuration_file_path }}
@@ -110,5 +110,5 @@ jobs:
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
-          body: ${{ steps.new_settings.outputs.CHANGES }}
+          body: ${{ steps.changed_settings.outputs.CHANGES }}
           edit-mode: replace

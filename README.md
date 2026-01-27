@@ -2,7 +2,7 @@
 
 ## Changed Settings
 
-Compare VSCode-specific settings between two tags and report results in the PR.
+Compare JSON schema-based settings between two tags and report results in the PR.
 
 Example workflow:
 
@@ -15,8 +15,8 @@ on:
     - main
 
 jobs:
-  check-new-settings:
-    uses: sublimelsp/workflows/.github/workflows/new-json-settings.yaml
+  check-settings:
+    uses: sublimelsp/workflows/.github/workflows/changed-settings.yaml
     with:
       repository_url: 'https://github.com/rust-lang/rust-analyzer'
       configuration_file_path: 'editors/code/package.json'
