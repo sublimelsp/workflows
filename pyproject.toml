@@ -3,6 +3,7 @@ target-version = "py312"
 
 [tool.pyright]
 pythonVersion = "3.12"
+typeCheckingMode = "strict"
 reportAny = "none"
 reportExplicitAny = "none"
 reportUnusedCallResult = "none"

@@ -29,10 +29,8 @@ type ConfigurationsDict = dict[str, Configuration]
 def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: str) -> Path:
     archive_url = f'{repository_url}/archive/{tag}.zip'
     zip_path = Path(target_dir, f'archive-{re.sub(r'[<>:"/\\|?*]', '_', tag)}.zip')
-
-    with urlopen(archive_url) as response, Path.open(zip_path, 'wb') as out_file:  # noqa: S310
+    with urlopen(archive_url) as response, zip_path.open('wb') as out_file:  # noqa: S310
         shutil.copyfileobj(response, out_file)
-
     return zip_path
 
 
@@ -40,8 +38,7 @@ def read_configuration_file(zip_path: Path, configuration_path: str, target_dir:
     with zipfile.ZipFile(zip_path, 'r') as zip_file:
         configuration = read_file_from_zip(zip_file, configuration_path, target_dir)
         if configuration is None:
-            print(f'Archive does not contain expected file {configuration_path}')
-            sys.exit(1)
+            raise Exception(f'Archive does not contain expected file {configuration_path}')
         # Optionally get translation file and update string references.
         translations_path = str(PurePosixPath(configuration_path).with_suffix('.nls.json'))
         translations = read_file_from_zip(zip_file, translations_path, target_dir)
@@ -52,12 +49,22 @@ def read_configuration_file(zip_path: Path, configuration_path: str, target_dir:
         return configuration
 
 
+def read_file_from_zip(zip_file: zipfile.ZipFile, path: str, target_dir: str) -> str | None:
+    parent_name = get_parent_directory(zip_file)
+    archive_path = f'{parent_name}/{path}' if parent_name else path
+    filepath = next((p for p in zip_file.namelist() if archive_path == p), None)
+    if not filepath:
+        return None
+    extracted_path = Path(zip_file.extract(filepath, target_dir))
+    return extracted_path.read_text(encoding='utf-8')
+
+
 def get_parent_directory(zip_file: zipfile.ZipFile) -> str | None:
     """
     Check if all files in the ZIP are contained within a parent directory.
     Returns str | None: Common parent name if present.
     """
-    
+
     # Filter out directory entries and get top-level paths.
     top_levels: set[str] = set()
     for name in zip_file.namelist():
@@ -67,22 +74,9 @@ def get_parent_directory(zip_file: zipfile.ZipFile) -> str | None:
         # Get the first component of the path
         top_level = name.split('/')[0]
         top_levels.add(top_level)
-    
-    # If there's only one top-level entry, all files share a parent
+        # If there's only one top-level entry, all files share a parent
     return top_levels.pop() if len(top_levels) == 1 else None
 
-
-def read_file_from_zip(zip_file: zipfile.ZipFile, path: str, target_dir: str) -> str | None:
-    parent_name = get_parent_directory(zip_file)
-    archive_path = f'{parent_name}/{path}' if parent_name else path
-    filepath = next((p for p in zip_file.namelist() if archive_path == p), None)
-    if not filepath:
-        return None
-    extracted_path = Path(zip_file.extract(filepath, target_dir))
-    contents = ''
-    with extracted_path.open(encoding='utf-8') as f:
-        contents = f.read()
-    return contents
 
 def generate_sublime_settings_markdown(settings: dict[str, Configuration]) -> str:
     sublime_settings: list[str] = []
@@ -99,7 +93,6 @@ def compare_json(
 ) -> tuple[dict[str, Configuration], dict[str, Configuration], list[str]]:
     flatten_settings_1 = jq(jq_query, contents_1)
     flatten_settings_2 = jq(jq_query, contents_2)
-
     # Find added, removed and changed keys.
     added: dict[str, Configuration] = {}
     changed: dict[str, Configuration] = {}
@@ -108,10 +101,8 @@ def compare_json(
         if key not in flatten_settings_1:
             added[key] = value
             continue
-
         if value != flatten_settings_1[key]:
             changed[key] = value
-
     return (added, changed, removed)
 
 
@@ -166,7 +157,9 @@ def main() -> None:
             lineterm=''))
 
         output: list[str] = [
-            f'Following are the [settings schema]({repository_url}/blob/{tag_to}/{configuration_file_path}) changes between tags `{tag_from}` and `{tag_to}`. Make sure that those are reflected in the package settings and the `sublime-package.json` file.\n'
+            f'Following are the [settings schema]({1}/blob/{2}/{3}) changes'
+            f' between tags `{4}` and `{5}`. Make sure that those are reflected in the package settings and the'
+            ' `sublime-package.json` file.\n'
         ]
 
         if diff:
