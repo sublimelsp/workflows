@@ -16,7 +16,7 @@ on:
 
 jobs:
   check-settings:
-    uses: sublimelsp/workflows/.github/workflows/changed-settings.yaml
+    uses: sublimelsp/workflows/.github/workflows/changed-settings.yaml@main
     with:
       repository_url: 'https://github.com/rust-lang/rust-analyzer'
       configuration_file_path: 'editors/code/package.json'
