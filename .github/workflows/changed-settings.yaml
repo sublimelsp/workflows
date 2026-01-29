@@ -24,6 +24,11 @@ on:
         description: The regexp pattern to extract version from the version file. The first capturing group must contain the released version tag present in repository_url.
         required: true
         type: string
+      version_transform:
+        description: Optional string used to transform the tag captured by version_regexp. This can for example add a 'v' in front of the tag. The {} is replaced with the captured tag.
+        default: '{}'
+        required: false
+        type: string
     outputs:
       version_changed:
         description: Set to 'true' if version has changed relative to the main branch.
@@ -90,9 +95,16 @@ jobs:
           CONFIGURATION_FILE_PATH: ${{ inputs.configuration_file_path }}
           CONFIGURATION_JQ_QUERY: ${{ inputs.configuration_jq_query }}
         run: |
+          VERSION_FROM="${{ steps.tag-from.outputs.version }}"
+          VERSION_TO="${{ steps.tag-to.outputs.version }}"
+          VERSION_TRANSFORM="${{ inputs.version_transform }}"
+
+          TRANSFORMED_FROM="${VERSION_TRANSFORM//\{\}/$VERSION_FROM}"
+          TRANSFORMED_TO="${VERSION_TRANSFORM//\{\}/$VERSION_TO}"
+
           {
             echo 'CHANGES<<EOF'
-            ./workflow-repo/scripts/changed_settings.py "$REPOSITORY_URL" "$CONFIGURATION_FILE_PATH" "$CONFIGURATION_JQ_QUERY" ${{ steps.tag-from.outputs.version }} ${{ steps.tag-to.outputs.version }}
+            ./workflow-repo/scripts/changed_settings.py "$REPOSITORY_URL" "$CONFIGURATION_FILE_PATH" "$CONFIGURATION_JQ_QUERY" "$TRANSFORMED_FROM" "$TRANSFORMED_TO"
             echo EOF
           } >> "$GITHUB_OUTPUT"
 
