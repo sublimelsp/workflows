@@ -4,6 +4,7 @@
 
 from pathlib import Path, PurePosixPath
 from typing import Any, TypedDict, cast
+from urllib.error import HTTPError
 from urllib.request import urlopen
 import argparse
 import difflib
@@ -29,8 +30,12 @@ type ConfigurationsDict = dict[str, Configuration]
 def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: str) -> Path:
     archive_url = f'{repository_url}/archive/{tag}.zip'
     zip_path = Path(target_dir, f'archive-{re.sub(r'[<>:"/\\|?*]', '_', tag)}.zip')
-    with urlopen(archive_url) as response, zip_path.open('wb') as out_file:  # noqa: S310
-        shutil.copyfileobj(response, out_file)
+    try:
+        with urlopen(archive_url) as response, zip_path.open('wb') as out_file:  # noqa: S310
+            shutil.copyfileobj(response, out_file)
+    except HTTPError as ex:
+        print(f'Error downloading {archive_url}')
+        raise ex
     return zip_path
 
 
