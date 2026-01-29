@@ -65,12 +65,12 @@ jobs:
           VERSION: ${{ inputs.version_regexp }}
         run: echo "version=$(rg -o "$VERSION" -r "\$1" "$FILE")" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout main
+      - name: Checkout default branch
         uses: actions/checkout@v6
         with:
-          ref: main
+          ref: ${{ github.event.repository.default_branch }}
 
-      - name: Get version from main
+      - name: Get version from default branch
         id: tag-from
         env:
           FILE: ${{ inputs.version_file }}
