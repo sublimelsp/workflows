@@ -161,7 +161,7 @@ def main() -> None:
             tofile=tag_to,
             lineterm=''))
 
-        schema_url = f'{repository_url}/blob/{tag_to}{configuration_file_path}'
+        schema_url = f'{repository_url}/blob/{tag_to}/{configuration_file_path}'
         output: list[str] = [
             f'Following are the [settings schema]({schema_url}) changes between tags `{tag_from}` and `{tag_to}`. '
             'Make sure that those are reflected in the package settings and `sublime-package.json`.\n'
