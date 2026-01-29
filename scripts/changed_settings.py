@@ -161,10 +161,10 @@ def main() -> None:
             tofile=tag_to,
             lineterm=''))
 
+        schema_url = f'{repository_url}/blob/{tag_to}{configuration_file_path}'
         output: list[str] = [
-            f'Following are the [settings schema]({1}/blob/{2}/{3}) changes'
-            f' between tags `{4}` and `{5}`. Make sure that those are reflected in the package settings and the'
-            ' `sublime-package.json` file.\n'
+            f'Following are the [settings schema]({schema_url}) changes between tags `{tag_from}` and `{tag_to}`. '
+            'Make sure that those are reflected in the package settings and `sublime-package.json`.\n'
         ]
 
         if diff:
