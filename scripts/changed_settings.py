@@ -33,7 +33,7 @@ type ConfigurationsDict = dict[str, Configuration]
 
 
 def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: str) -> Path:
-    archive_url = f'{repository_url}/archive/{tag}.zip'
+    archive_url = f'{repository_url}/archive/refs/tags/{tag}.zip'
     zip_path = Path(target_dir, f'archive-{re.sub(r'[<>:"/\\|?*]', '_', tag)}.zip')
     try:
         with urlopen(archive_url) as response, zip_path.open('wb') as out_file:  # noqa: S310
