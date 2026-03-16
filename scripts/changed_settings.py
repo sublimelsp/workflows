@@ -2,6 +2,8 @@
 
 """Prints differences in server settings between two tags."""
 
+from __future__ import annotations
+
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any
@@ -15,6 +17,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import zipfile
 
@@ -36,7 +39,7 @@ def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: s
         with urlopen(archive_url) as response, zip_path.open('wb') as out_file:  # noqa: S310
             shutil.copyfileobj(response, out_file)
     except HTTPError as ex:
-        print(f'Error downloading {archive_url}')
+        print(f'Error downloading {archive_url}', file=sys.stderr)
         raise ex
     return zip_path
 
@@ -115,7 +118,7 @@ def compare_json(
 
 def jq(query: str, contents: str) -> ConfigurationsDict:
     return cast(ConfigurationsDict,
-                json.loads(subprocess.check_output(['jq', query], input=contents, text=True, encoding='utf-8')))
+                json.loads(subprocess.check_output(['jq', query], input=contents, text=True, encoding='utf-8')))  # noqa: S607
 
 
 def json_serialize(contents: Any) -> str:
@@ -165,8 +168,8 @@ def main() -> None:
 
         schema_url = f'{repository_url}/blob/{tag_to}/{configuration_file_path}'
         output: list[str] = [
-            f'Following are the [settings schema]({schema_url}) changes between tags `{tag_from}` and `{tag_to}`. '
-            'Make sure that those are reflected in the package settings and `sublime-package.json`.\n'
+            (f'Following are the [settings schema]({schema_url}) changes between tags `{tag_from}` and `{tag_to}`. '
+            'Make sure that those are reflected in the package settings and `sublime-package.json`.\n')
         ]
 
         if diff:
@@ -191,5 +194,6 @@ def main() -> None:
             output.append('No changes')
 
         print('\n\n'.join(output))
+
 
 main()
