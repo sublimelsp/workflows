@@ -2,8 +2,11 @@
 
 """Prints differences in server settings between two tags."""
 
-from pathlib import Path, PurePosixPath
-from typing import Any, TypedDict, cast
+from pathlib import Path
+from pathlib import PurePosixPath
+from typing import Any
+from typing import cast
+from typing import TypedDict
 from urllib.error import HTTPError
 from urllib.request import urlopen
 import argparse
@@ -12,7 +15,6 @@ import json
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import zipfile
 
