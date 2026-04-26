@@ -16,8 +16,13 @@ on:
         required: false
         type: string
         default: '.contributes.configuration.properties'
+      schema_overrides_path:
+        description: A repo-relative path to a JSON file with optional "add", "remove", "transform" keys used to transform and override upstream schema. "add" is a dictionary of schemas to add, "remove" a list of keys to remove and "transform" is a list of JQ queries to apply the input schema.
+        required: false
+        type: string
+        default: 'sublime-package.overrides.json'
       version_file:
-        description: Relative path to the file that contains version information
+        description: Repo-relative path to the file that contains version information
         required: true
         type: string
       version_regexp:
@@ -94,6 +99,7 @@ jobs:
           REPOSITORY_URL: ${{ inputs.repository_url }}
           CONFIGURATION_FILE_PATH: ${{ inputs.configuration_file_path }}
           CONFIGURATION_JQ_QUERY: ${{ inputs.configuration_jq_query }}
+          SCHEMA_OVERRIDES_PATH: ${{ inputs.schema_overrides_path }}
         run: |
           VERSION_FROM="${{ steps.tag-from.outputs.version }}"
           VERSION_TO="${{ steps.tag-to.outputs.version }}"
@@ -104,7 +110,7 @@ jobs:
 
           {
             echo 'CHANGES<<EOF'
-            ./workflow-repo/scripts/changed_settings.py "$REPOSITORY_URL" "$CONFIGURATION_FILE_PATH" "$CONFIGURATION_JQ_QUERY" "$TRANSFORMED_FROM" "$TRANSFORMED_TO"
+            ./workflow-repo/scripts/changed_settings.py "$REPOSITORY_URL" "$CONFIGURATION_FILE_PATH" "$CONFIGURATION_JQ_QUERY" "$TRANSFORMED_FROM" "$TRANSFORMED_TO" --schema-overrides-path="$SCHEMA_OVERRIDES_PATH"
             echo EOF
           } >> "$GITHUB_OUTPUT"
 
