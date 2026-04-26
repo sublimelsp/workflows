@@ -105,9 +105,6 @@ def generate_sublime_settings_markdown(settings: dict[str, Configuration]) -> st
 
 
 def override_settings(settings: ConfigurationsDict, overrides: SchemaOverrides) -> ConfigurationsDict:
-    # Add (always at the beginning)
-    add = overrides.get('add', {})
-    settings = {**add, **settings}
     # Remove
     remove = overrides.get('remove', [])
     for key in list(settings.keys()):
@@ -117,7 +114,9 @@ def override_settings(settings: ConfigurationsDict, overrides: SchemaOverrides) 
     transform = overrides.get('transform', [])
     for query in transform:
         settings = jq(query, json.dumps(settings))
-    return settings
+    # Add (always at the beginning)
+    add = overrides.get('add', {})
+    return {**add, **settings}
 
 
 def compare_settings(
