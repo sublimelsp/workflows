@@ -22,6 +22,8 @@ jobs:
       configuration_file_path: 'editors/code/package.json'
       # Optional
       configuration_jq_query: '.contributes.configuration.properties'
+      # Optional
+      schema_overrides_path: 'sublime-package.overrides.json'
       version_file: 'plugin.py'
       version_regexp: 'TAG = "([^"]+)"'
       # Optional string used to transform the tag captured by version_regexp. This can for example add a 'v' in front of the tag. The {} is replaced with the captured tag.
