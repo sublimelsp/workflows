@@ -17,7 +17,7 @@ on:
         type: string
         default: '.contributes.configuration.properties'
       schema_overrides_path:
-        description: A repo-relative path to a JSON file with optional "add", "remove", "transform" keys used to transform and override upstream schema.
+        description: A repo-relative path to a JSON file with optional "add", "remove", "transform" keys used to transform and override upstream schema. "add" is a dictionary of schemas to add, "remove" a list of keys to remove and "transform" is a list of JQ queries to apply the input schema.
         required: false
         type: string
         default: 'sublime-package.overrides.json'
