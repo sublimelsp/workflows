@@ -243,11 +243,11 @@ def main() -> None:
             if args.output_schema_path:
                 target_path = Path(args.output_schema_path)
                 target_path.parent.mkdir(parents=True, exist_ok=True)
-                target_path.write_text(json_serialize(settings_2), encoding='utf-8')
+                target_path.write_text(full_schema, encoding='utf-8')
             if args.output_settings_path:
                 target_path = Path(args.output_settings_path)
                 target_path.parent.mkdir(parents=True, exist_ok=True)
-                target_path.write_text(json_serialize(settings_2), encoding='utf-8')
+                target_path.write_text(full_settings, encoding='utf-8')
         else:
             output.append('No changes')
 
