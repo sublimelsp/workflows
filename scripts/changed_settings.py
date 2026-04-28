@@ -155,6 +155,17 @@ def markdown_collapsible_section(summary: str, contents: str) -> str:
 
 
 def main() -> None:
+
+    class CmdLineArgs(argparse.Namespace):
+        repository_url: str
+        configuration_file_path: str
+        configuration_jq_query: str
+        output_schema_path: str | None
+        output_settings_path: str | None
+        schema_overrides_path: str
+        tag_from: str
+        tag_to: str
+
     parser = argparse.ArgumentParser(description='Checks for differences in configuration between two tags')
     parser.add_argument('repository_url',
                         help='The github URL to the repository that contains the configuration to check file..')
@@ -164,17 +175,21 @@ def main() -> None:
                         help='The JQ query to use to retrieve configuration settings.')
     parser.add_argument('--schema-overrides-path',
                         default='sublime-package.overrides.json',
-                        help='A file with augmentation used to transform the full schema.')
+                        help='A path to file with augmentation used to transform the full schema.')
+    parser.add_argument('--output-schema-path',
+                        help='A path to file that will include whole schema if there are changes.')
+    parser.add_argument('--output-settings-path',
+                        help='A path to file that will include whole sublime settings if there are changes.')
     parser.add_argument('tag_from', help='First tag to compare.')
     parser.add_argument('tag_to', help='Second tag to compare.')
-    args = parser.parse_args()
+    args = parser.parse_args(namespace=CmdLineArgs())
 
-    repository_url: str = args.repository_url
-    configuration_file_path: str = args.configuration_file_path
-    configuration_jq_query: str = args.configuration_jq_query
+    repository_url = args.repository_url
+    configuration_file_path = args.configuration_file_path
+    configuration_jq_query = args.configuration_jq_query
     schema_overrides_path = Path(args.schema_overrides_path)
-    tag_from: str = args.tag_from
-    tag_to: str = args.tag_to
+    tag_from = args.tag_from
+    tag_to = args.tag_to
 
     with tempfile.TemporaryDirectory() as tempdir:
         archive_path_1 = download_github_artifact_by_tag(repository_url, tag_from, tempdir)
@@ -218,13 +233,21 @@ def main() -> None:
                 key_list = '\n'.join([f' - `{k}`' for k in removed])
                 output.append(f'Removed keys (${len(key_list)}):\n{key_list}')
 
+            full_settings = generate_sublime_settings_markdown(settings_2)
+            full_schema = json_serialize(settings_2)
+
             output.extend((
                 markdown_collapsible_section('All changes in the schema', f'```diff\n{diff}\n```'),
-                markdown_collapsible_section('Whole sublime-settings configuration',
-                                             generate_sublime_settings_markdown(settings_2)),
-                markdown_collapsible_section('Whole sublime-package schema',
-                                             f'```jsonc\n{json_serialize(settings_2)}\n```')
             ))
+
+            if args.output_schema_path:
+                target_path = Path(args.output_schema_path)
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                target_path.write_text(json_serialize(settings_2), encoding='utf-8')
+            if args.output_settings_path:
+                target_path = Path(args.output_settings_path)
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                target_path.write_text(json_serialize(settings_2), encoding='utf-8')
         else:
             output.append('No changes')
 

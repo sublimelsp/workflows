@@ -108,7 +108,31 @@ jobs:
           TRANSFORMED_FROM="${VERSION_TRANSFORM//\{\}/$VERSION_FROM}"
           TRANSFORMED_TO="${VERSION_TRANSFORM//\{\}/$VERSION_TO}"
 
-          ./workflow-repo/scripts/changed_settings.py "$REPOSITORY_URL" "$CONFIGURATION_FILE_PATH" "$CONFIGURATION_JQ_QUERY" "$TRANSFORMED_FROM" "$TRANSFORMED_TO" --schema-overrides-path="$SCHEMA_OVERRIDES_PATH" > "$RUNNER_TEMP/changes.md"
+          ./workflow-repo/scripts/changed_settings.py \
+            "$REPOSITORY_URL" \
+            "$CONFIGURATION_FILE_PATH" \
+            "$CONFIGURATION_JQ_QUERY" \
+            "$TRANSFORMED_FROM" \
+            "$TRANSFORMED_TO" \
+            --output-schema-path="artifacts/full-schema.json" \
+            --output-settings-path="artifacts/full-settings.json" \
+            --schema-overrides-path="$SCHEMA_OVERRIDES_PATH" > "$RUNNER_TEMP/changes.md"
+
+      - if: steps.version-check.outputs.version_changed == 'true'
+        name: Upload artifacts
+        id: upload-artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: settings-artifacts
+          path: artifacts/
+
+      - if: steps.version-check.outputs.version_changed == 'true'
+        name: Append artifacts to comment
+        run: |
+          {
+            echo ""
+            echo "Full settings and schema JSONs are available from [**artifacts page**](${{ steps.upload-artifacts.outputs.artifact-url }})"
+          } >> "$RUNNER_TEMP/changes.md"
 
       - if: steps.version-check.outputs.version_changed == 'true'
         name: Find Comment
