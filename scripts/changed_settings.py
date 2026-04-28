@@ -122,6 +122,8 @@ def get_default_value(key: str, value: Configuration) -> Any:
     if 'default' in value:
         return value['default']
     print(f'warning: adding null default value for {key} due to no default value specified')
+    if value['type'] == 'object':
+        return {}
     if isinstance(value['type'], list):
         if 'null' in value['type']:
             return None
