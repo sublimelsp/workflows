@@ -236,7 +236,7 @@ def main() -> None:
             full_schema = json_serialize(settings_2)
 
             output.extend((
-                markdown_collapsible_section('All changes in the schema', f'```diff\n{diff}\n```'),
+                markdown_collapsible_section('All changes in the configuration file', f'```diff\n{diff}\n```'),
             ))
 
             if args.output_schema_path:
