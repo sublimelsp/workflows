@@ -94,14 +94,13 @@ def get_parent_directory(zip_file: zipfile.ZipFile) -> str | None:
     return top_levels.pop() if len(top_levels) == 1 else None
 
 
-def generate_sublime_settings_markdown(settings: dict[str, Configuration]) -> str:
+def generate_sublime_settings(settings: dict[str, Configuration]) -> str:
     sublime_settings: list[str] = []
     for key, value in settings.items():
         description: str = value['markdownDescription'] if 'markdownDescription' in value else value['description']
         wrapped_description: str = '\n'.join([f'// {line}'.rstrip() for line in description.splitlines()])
         sublime_settings.append(f'{wrapped_description}\n"{key}": {json_serialize(value['default'])},')
-    sublime_settings_str = '\n\n'.join(sublime_settings)
-    return f'```\n{sublime_settings_str}\n```'
+    return '\n\n'.join(sublime_settings)
 
 
 def override_settings(settings: ConfigurationsDict, overrides: SchemaOverrides) -> ConfigurationsDict:
@@ -222,18 +221,18 @@ def main() -> None:
             if added:
                 output.append(markdown_collapsible_section(
                     f'Added keys ({len(added.keys())})',
-                    f'```json\n{json_serialize(added)}\n```\n{generate_sublime_settings_markdown(added)}'))
+                    f'```json\n{json_serialize(added)}\n```\n```jsonc\n{generate_sublime_settings(added)}\n```'))
 
             if changed:
                 output.append(markdown_collapsible_section(
                     f'Changed keys ({len(changed.keys())})',
-                    f'```json\n{json_serialize(changed)}\n```\n{generate_sublime_settings_markdown(changed)}'))
+                    f'```json\n{json_serialize(changed)}\n```\n```jsonc\n{generate_sublime_settings(changed)}\n```'))
 
             if removed:
                 key_list = '\n'.join([f' - `{k}`' for k in removed])
                 output.append(f'Removed keys (${len(key_list)}):\n{key_list}')
 
-            full_settings = generate_sublime_settings_markdown(settings_2)
+            full_settings = generate_sublime_settings(settings_2)
             full_schema = json_serialize(settings_2)
 
             output.extend((
