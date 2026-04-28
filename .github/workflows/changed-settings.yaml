@@ -108,11 +108,7 @@ jobs:
           TRANSFORMED_FROM="${VERSION_TRANSFORM//\{\}/$VERSION_FROM}"
           TRANSFORMED_TO="${VERSION_TRANSFORM//\{\}/$VERSION_TO}"
 
-          {
-            echo 'CHANGES<<EOF'
-            ./workflow-repo/scripts/changed_settings.py "$REPOSITORY_URL" "$CONFIGURATION_FILE_PATH" "$CONFIGURATION_JQ_QUERY" "$TRANSFORMED_FROM" "$TRANSFORMED_TO" --schema-overrides-path="$SCHEMA_OVERRIDES_PATH"
-            echo EOF
-          } >> "$GITHUB_OUTPUT"
+          ./workflow-repo/scripts/changed_settings.py "$REPOSITORY_URL" "$CONFIGURATION_FILE_PATH" "$CONFIGURATION_JQ_QUERY" "$TRANSFORMED_FROM" "$TRANSFORMED_TO" --schema-overrides-path="$SCHEMA_OVERRIDES_PATH" > "$RUNNER_TEMP/changes.md"
 
       - if: steps.version-check.outputs.version_changed == 'true'
         name: Find Comment
@@ -128,5 +124,5 @@ jobs:
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
-          body: ${{ steps.changed_settings.outputs.CHANGES }}
+          body-path: ${{ runner.temp }}/changes.md
           edit-mode: replace
