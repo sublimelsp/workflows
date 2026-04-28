@@ -60,16 +60,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ripgrep
 
-      - name: Checkout PR
-        uses: actions/checkout@v6
-
-      - name: Get version from PR
-        id: tag-to
-        env:
-          FILE: ${{ inputs.version_file }}
-          VERSION: ${{ inputs.version_regexp }}
-        run: echo "version=$(rg -o "$VERSION" -r "\$1" "$FILE")" >> "$GITHUB_OUTPUT"
-
       - name: Checkout default branch
         uses: actions/checkout@v6
         with:
@@ -77,6 +67,16 @@ jobs:
 
       - name: Get version from default branch
         id: tag-from
+        env:
+          FILE: ${{ inputs.version_file }}
+          VERSION: ${{ inputs.version_regexp }}
+        run: echo "version=$(rg -o "$VERSION" -r "\$1" "$FILE")" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout PR
+        uses: actions/checkout@v6
+
+      - name: Get version from PR
+        id: tag-to
         env:
           FILE: ${{ inputs.version_file }}
           VERSION: ${{ inputs.version_regexp }}
@@ -107,6 +107,9 @@ jobs:
 
           TRANSFORMED_FROM="${VERSION_TRANSFORM//\{\}/$VERSION_FROM}"
           TRANSFORMED_TO="${VERSION_TRANSFORM//\{\}/$VERSION_TO}"
+
+          echo "transformed_from: ${TRANSFORMED_FROM}"
+          echo "transformed_to: ${TRANSFORMED_TO}"
 
           ./workflow-repo/scripts/changed_settings.py \
             "$REPOSITORY_URL" \
