@@ -8,6 +8,7 @@ from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any
 from typing import cast
+from typing import NotRequired
 from typing import TypedDict
 from urllib.error import HTTPError
 from urllib.request import urlopen
@@ -32,15 +33,21 @@ class Configuration(TypedDict):
 type ConfigurationsDict = dict[str, Configuration]
 
 
+class SchemaOverrides(TypedDict):
+    add: NotRequired[dict[str, Configuration]]
+    remove: NotRequired[list[str]]
+    transform: NotRequired[list[str]]
+
+
 def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: str) -> Path:
     archive_url = f'{repository_url}/archive/refs/tags/{tag}.zip'
     zip_path = Path(target_dir, f'archive-{re.sub(r'[<>:"/\\|?*]', '_', tag)}.zip')
     try:
-        with urlopen(archive_url) as response, zip_path.open('wb') as out_file:  # noqa: S310
+        with urlopen(archive_url) as response, zip_path.open('wb') as out_file:
             shutil.copyfileobj(response, out_file)
-    except HTTPError as ex:
+    except HTTPError:
         print(f'Error downloading {archive_url}', file=sys.stderr)
-        raise ex
+        raise
     return zip_path
 
 
@@ -74,7 +81,6 @@ def get_parent_directory(zip_file: zipfile.ZipFile) -> str | None:
     Check if all files in the ZIP are contained within a parent directory.
     Returns str | None: Common parent name if present.
     """
-
     # Filter out directory entries and get top-level paths.
     top_levels: set[str] = set()
     for name in zip_file.namelist():
@@ -98,26 +104,39 @@ def generate_sublime_settings_markdown(settings: dict[str, Configuration]) -> st
     return f'```\n{sublime_settings_str}\n```'
 
 
-def compare_json(
-    jq_query: str, contents_1: str, contents_2: str
+def override_settings(settings: ConfigurationsDict, overrides: SchemaOverrides) -> ConfigurationsDict:
+    # Remove
+    remove = overrides.get('remove', [])
+    for key in list(settings.keys()):
+        if key in remove:
+            del settings[key]
+    # Transform
+    transform = overrides.get('transform', [])
+    for query in transform:
+        settings = jq(query, json.dumps(settings))
+    # Add (always at the beginning)
+    add = overrides.get('add', {})
+    return {**add, **settings}
+
+
+def compare_settings(
+    settings_1: ConfigurationsDict, settings_2: ConfigurationsDict
 ) -> tuple[dict[str, Configuration], dict[str, Configuration], list[str]]:
-    flatten_settings_1 = jq(jq_query, contents_1)
-    flatten_settings_2 = jq(jq_query, contents_2)
     # Find added, removed and changed keys.
     added: dict[str, Configuration] = {}
     changed: dict[str, Configuration] = {}
-    removed: list[str] = [key for key in flatten_settings_1 if key not in flatten_settings_2]
-    for key, value in flatten_settings_2.items():
-        if key not in flatten_settings_1:
+    removed: list[str] = [key for key in settings_1 if key not in settings_2]
+    for key, value in settings_2.items():
+        if key not in settings_1:
             added[key] = value
             continue
-        if value != flatten_settings_1[key]:
+        if value != settings_1[key]:
             changed[key] = value
     return (added, changed, removed)
 
 
 def jq(query: str, contents: str) -> ConfigurationsDict:
-    return cast(ConfigurationsDict,
+    return cast('ConfigurationsDict',
                 json.loads(subprocess.check_output(['jq', query], input=contents, text=True, encoding='utf-8')))  # noqa: S607
 
 
@@ -143,6 +162,9 @@ def main() -> None:
                         help='A path to the configuration file relative to the repository_url.')
     parser.add_argument('configuration_jq_query',
                         help='The JQ query to use to retrieve configuration settings.')
+    parser.add_argument('--schema-overrides-path',
+                        default='sublime-package.overrides.json',
+                        help='A file with augmentation used to transform the full schema.')
     parser.add_argument('tag_from', help='First tag to compare.')
     parser.add_argument('tag_to', help='Second tag to compare.')
     args = parser.parse_args()
@@ -150,6 +172,7 @@ def main() -> None:
     repository_url: str = args.repository_url
     configuration_file_path: str = args.configuration_file_path
     configuration_jq_query: str = args.configuration_jq_query
+    schema_overrides_path = Path(args.schema_overrides_path)
     tag_from: str = args.tag_from
     tag_to: str = args.tag_to
 
@@ -173,7 +196,13 @@ def main() -> None:
         ]
 
         if diff:
-            added, changed, removed = compare_json(configuration_jq_query, configuration_1, configuration_2)
+            settings_1 = jq(configuration_jq_query, configuration_1)
+            settings_2 = jq(configuration_jq_query, configuration_2)
+            if schema_overrides_path.is_file():
+                overrides = json.loads(schema_overrides_path.read_text(encoding='utf-8'))
+                settings_1 = override_settings(settings_1, overrides)
+                settings_2 = override_settings(settings_2, overrides)
+            added, changed, removed = compare_settings(settings_1, settings_2)
 
             if added:
                 output.append(markdown_collapsible_section(
@@ -189,7 +218,13 @@ def main() -> None:
                 key_list = '\n'.join([f' - `{k}`' for k in removed])
                 output.append(f'Removed keys (${len(key_list)}):\n{key_list}')
 
-            output.append(markdown_collapsible_section('All changes in schema', f'```diff\n{diff}\n```'))
+            output.extend((
+                markdown_collapsible_section('All changes in the schema', f'```diff\n{diff}\n```'),
+                markdown_collapsible_section('Whole sublime-settings configuration',
+                                             generate_sublime_settings_markdown(settings_2)),
+                markdown_collapsible_section('Whole sublime-package schema',
+                                             f'```jsonc\n{json_serialize(settings_2)}\n```')
+            ))
         else:
             output.append('No changes')
 
