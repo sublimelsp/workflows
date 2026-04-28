@@ -24,10 +24,13 @@ import zipfile
 
 
 class Configuration(TypedDict):
-    type: str
-    default: bool | int | str | None
-    description: str
-    markdownDescription: str
+    type: str | list[str]
+    default: NotRequired[bool | int | str | None]
+    description: NotRequired[str]
+    markdownDescription: NotRequired[str]
+    enum: NotRequired[list[str]]
+    enumDescriptions: NotRequired[list[str]]
+    markdownEnumDescriptions: NotRequired[list[str]]
 
 
 type ConfigurationsDict = dict[str, Configuration]
@@ -97,10 +100,35 @@ def get_parent_directory(zip_file: zipfile.ZipFile) -> str | None:
 def generate_sublime_settings(settings: dict[str, Configuration]) -> str:
     sublime_settings: list[str] = []
     for key, value in settings.items():
-        description: str = value['markdownDescription'] if 'markdownDescription' in value else value['description']
+        description = get_description(key, value)
         wrapped_description: str = '\n'.join([f'// {line}'.rstrip() for line in description.splitlines()])
-        sublime_settings.append(f'{wrapped_description}\n"{key}": {json_serialize(value['default'])},')
+        sublime_settings.append(
+            f'{wrapped_description}\n"{key}": {json_serialize(get_default_value(key, value), indent='\t')},')
     return '\n\n'.join(sublime_settings)
+
+
+def get_description(key: str, value: Configuration) -> str:
+    if 'markdownDescription' in value:
+        return value['markdownDescription']
+    if 'description' in value:
+        return value['description']
+    if 'enum' in value:
+        descriptions: list[str] = value.get('enumDescriptions', value.get('markdownEnumDescriptions', []))
+        return '\n'.join([f'{value['enum'][i]} - {descriptions[i]}' for i, _ in enumerate(value['enum'])])
+    raise Exception(f'Could not get description for item:\n{json_serialize([key, value])}')
+
+
+def get_default_value(key: str, value: Configuration) -> Any:
+    if 'default' in value:
+        return value['default']
+    print(f'warning: adding null default value for {key} due to no default value specified')
+    if isinstance(value['type'], list):
+        if 'null' in value['type']:
+            return None
+        value['type'].append('null')
+    else:
+        value['type'] = [value['type'], 'null']
+    return None
 
 
 def override_settings(settings: ConfigurationsDict, overrides: SchemaOverrides) -> ConfigurationsDict:
@@ -139,8 +167,8 @@ def jq(query: str, contents: str) -> ConfigurationsDict:
                 json.loads(subprocess.check_output(['jq', query], input=contents, text=True, encoding='utf-8')))  # noqa: S607
 
 
-def json_serialize(contents: Any) -> str:
-    return json.dumps(contents, indent=2)
+def json_serialize(contents: Any, indent: int | str = 2) -> str:
+    return json.dumps(contents, indent=indent)
 
 
 def markdown_collapsible_section(summary: str, contents: str) -> str:
