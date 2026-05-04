@@ -41,6 +41,9 @@ on:
       new_version:
         description: Set to the tag of the new version.
         value: ${{ jobs.changed_settings.outputs.new_version }}
+      settings_changed:
+        description: Set to 'true' if settings have changed between versions, 'false' if output was "No changes".
+        value: ${{ jobs.changed_settings.outputs.settings_changed }}
 
 permissions:
   pull-requests: write
@@ -53,6 +56,7 @@ jobs:
     outputs:
       version_changed: ${{ steps.version-check.outputs.version_changed }}
       new_version: ${{ steps.tag-to.outputs.version }}
+      settings_changed: ${{ steps.settings-changed-check.outputs.settings_changed }}
 
     steps:
       - name: Install packages
@@ -122,6 +126,16 @@ jobs:
             --schema-overrides-path="$SCHEMA_OVERRIDES_PATH" > "$RUNNER_TEMP/changes.md"
 
       - if: steps.version-check.outputs.version_changed == 'true'
+        name: Check for changes
+        id: settings-changed-check
+        run: |
+          if grep -q "No changes" "$RUNNER_TEMP/changes.md"; then
+            echo "settings_changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "settings_changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.settings-changed-check.outputs.settings_changed == 'true'
         name: Upload artifacts
         id: upload-artifacts
         uses: actions/upload-artifact@v7
@@ -129,7 +143,7 @@ jobs:
           name: settings-artifacts
           path: artifacts/
 
-      - if: steps.version-check.outputs.version_changed == 'true'
+      - if: steps.settings-changed-check.outputs.settings_changed == 'true'
         name: Append artifacts to comment
         run: |
           {
