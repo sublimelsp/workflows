@@ -98,22 +98,25 @@ def get_parent_directory(zip_file: zipfile.ZipFile) -> str | None:
 def generate_sublime_settings(settings: dict[str, Configuration]) -> str:
     sublime_settings: list[str] = []
     for key, value in settings.items():
-        description = get_description(key, value)
-        wrapped_description: str = '\n'.join([f'// {line}'.rstrip() for line in description.splitlines()])
-        sublime_settings.append(
-            f'{wrapped_description}\n"{key}": {json_serialize(get_default_value(key, value), indent='\t')},')
+        if description := get_description(value):
+            wrapped_description: str = '\n'.join([f'// {line}'.rstrip() for line in description.splitlines()])
+            sublime_settings.append(
+                f'{wrapped_description}\n"{key}": {json_serialize(get_default_value(key, value), indent='\t')},')
+        else:
+            sublime_settings.append(
+                f'"{key}": {json_serialize(get_default_value(key, value), indent='\t')},')
     return '\n\n'.join(sublime_settings)
 
 
-def get_description(key: str, value: Configuration) -> str:
+def get_description(value: Configuration) -> str | None:
     if 'markdownDescription' in value:
         return value['markdownDescription']
     if 'description' in value:
         return value['description']
     if 'enum' in value:
-        descriptions: list[str] = value.get('enumDescriptions', value.get('markdownEnumDescriptions', []))
-        return '\n'.join([f'{value['enum'][i]} - {descriptions[i]}' for i, _ in enumerate(value['enum'])])
-    raise Exception(f'Could not get description for item:\n{json_serialize([key, value])}')
+        if descriptions := value.get('enumDescriptions', value.get('markdownEnumDescriptions', [])):
+            return '\n'.join([f'{value['enum'][i]} - {descriptions[i]}' for i, _ in enumerate(value['enum'])])
+    return None
 
 
 def get_default_value(key: str, value: Configuration) -> Any:
