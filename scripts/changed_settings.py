@@ -18,7 +18,6 @@ import json
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import zipfile
 
@@ -48,9 +47,8 @@ def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: s
     try:
         with urlopen(archive_url) as response, zip_path.open('wb') as out_file:
             shutil.copyfileobj(response, out_file)
-    except HTTPError:
-        print(f'Error downloading {archive_url}', file=sys.stderr)
-        raise
+    except HTTPError as e:
+        raise RuntimeError(f'HTTP {e.code}, fetching {archive_url!r}: {e.reason}') from e
     return zip_path
 
 
