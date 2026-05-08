@@ -148,7 +148,7 @@ jobs:
         run: |
           {
             echo ""
-            echo "Full settings and schema JSONs are available as [**artifacts**](${{ steps.upload-artifacts.outputs.artifact-url }})"
+            echo "Full settings and schema dumps are available as [**artifacts**](${{ steps.upload-artifacts.outputs.artifact-url }})"
           } >> "$RUNNER_TEMP/changes.md"
 
       - if: steps.version-check.outputs.version_changed == 'true'

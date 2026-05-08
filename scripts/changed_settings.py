@@ -166,8 +166,11 @@ def compare_settings(
 
 
 def jq(query: str, contents: str) -> ConfigurationsDict:
-    return cast('ConfigurationsDict',
-                json.loads(subprocess.check_output(['jq', query], input=contents, text=True, encoding='utf-8')))  # noqa: S607
+    try:
+        return cast('ConfigurationsDict',
+                    json.loads(subprocess.check_output(['jq', query], input=contents, text=True, encoding='utf-8')))  # noqa: S607
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f'Error running jq command: {e.cmd} for input:\n{contents}') from e
 
 
 def json_serialize(contents: Any, indent: int | str = 2) -> str:
