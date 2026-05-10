@@ -111,7 +111,7 @@ def generate_sublime_settings(settings: dict[str, Configuration]) -> str:
         else:
             sublime_settings.append(
                 f'"{key}": {json_serialize(get_default_value(key, value), indent='\t')},')
-    return '\n\n'.join(sublime_settings)
+    return '\n'.join(sublime_settings)
 
 
 def get_description(value: Configuration) -> str | None:
