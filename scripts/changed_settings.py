@@ -139,7 +139,7 @@ def override_settings(settings: ConfigurationsDict, overrides: SchemaOverrides) 
     remove = overrides.get('remove', [])
     for key in list(settings.keys()):
         if key in remove:
-            del settings[key]
+            settings.pop(key)
     # Transform
     transform = overrides.get('transform', [])
     for query in transform:
