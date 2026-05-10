@@ -41,6 +41,11 @@ class SchemaOverrides(TypedDict):
     transform: NotRequired[list[str]]
 
 
+class LocalizationObject(TypedDict):
+    message: str
+    comment: NotRequired[str]
+
+
 def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: str) -> Path:
     archive_url = f'{repository_url}/archive/refs/tags/{tag}.zip'
     zip_path = Path(target_dir, f'archive-{re.sub(r'[<>:"/\\|?*]', '_', tag)}.zip')
@@ -61,9 +66,10 @@ def read_configuration_file(zip_path: Path, configuration_path: str, target_dir:
         translations_path = str(PurePosixPath(configuration_path).with_suffix('.nls.json'))
         translations = read_file_from_zip(zip_file, translations_path, target_dir)
         if translations:
-            translations_json: dict[str, str] = json.loads(translations)
+            translations_json: dict[str, str | LocalizationObject] = json.loads(translations)
             for key, value in translations_json.items():
-                configuration = configuration.replace(f'"%{key}%"', json_serialize(value))
+                configuration = configuration.replace(
+                    f'"%{key}%"', json_serialize(value if isinstance(value, str) else value['message']))
         return configuration
 
 
