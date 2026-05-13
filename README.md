@@ -29,3 +29,61 @@ jobs:
       # Optional string used to transform the tag captured by version_regexp. This can for example add a 'v' in front of the tag. The {} is replaced with the captured tag.
       version_transform: '{}'
 ```
+
+### Running locally
+
+Prerequisites: [uv](https://docs.astral.sh/uv/getting-started/installation/)
+
+Install dependencies:
+
+```sh
+uv sync
+```
+
+A `settings-processor.json` config file is required in the working directory. See `--config` in the optional flags below.
+
+```sh
+uv run scripts/changed_settings.py \
+  <repository_url> \
+  <configuration_file_path> \
+  <tag_from> \
+  <tag_to>
+```
+
+Using the rust-analyzer example above, comparing tags `2024-11-25` and `2024-12-02`:
+
+```sh
+uv run scripts/changed_settings.py \
+  https://github.com/rust-lang/rust-analyzer \
+  editors/code/package.json \
+  2024-11-25 \
+  2024-12-02
+```
+
+#### Installing globally
+
+To make `changed-settings` available as a command anywhere on your system, install the package in editable (dev) mode:
+
+```sh
+uv tool install --editable .
+```
+
+The command can then be invoked directly without `uv run` or a script path:
+
+```sh
+changed-settings \
+  https://github.com/rust-lang/rust-analyzer \
+  editors/code/package.json \
+  2024-11-25 \
+  2024-12-02
+```
+
+To uninstall: `uv tool uninstall workflows`
+
+Optional flags:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--config` | `settings-processor.json` | Path to a JSON file with `add`, `remove`, and/or `transform` keys to augment the schema. |
+| `--output-schema-path` | _(none)_ | If set, writes the full schema JSON to this path when there are changes. |
+| `--output-settings-path` | _(none)_ | If set, writes the full Sublime Text settings to this path when there are changes. |

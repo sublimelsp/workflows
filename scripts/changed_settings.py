@@ -8,12 +8,14 @@ from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any
 from typing import cast
+from typing import Literal
 from typing import NotRequired
 from typing import TypedDict
 from urllib.error import HTTPError
 from urllib.request import urlopen
 import argparse
 import difflib
+import jinja2
 import json
 import re
 import shutil
@@ -22,7 +24,7 @@ import tempfile
 import zipfile
 
 
-class Configuration(TypedDict):
+class Setting(TypedDict):
     type: str | list[str]
     default: NotRequired[bool | int | str | None]
     description: NotRequired[str]
@@ -32,18 +34,45 @@ class Configuration(TypedDict):
     markdownEnumDescriptions: NotRequired[list[str]]
 
 
-type ConfigurationsDict = dict[str, Configuration]
-
-
-class SchemaOverrides(TypedDict):
-    add: NotRequired[dict[str, Configuration]]
-    remove: NotRequired[list[str]]
-    transform: NotRequired[list[str]]
+type SettingsDict = dict[str, Setting]
 
 
 class LocalizationObject(TypedDict):
     message: str
     comment: NotRequired[str]
+
+
+class Config(TypedDict):
+    input_repository_url: str
+    """The github URL to the repository that contains the configuration to check file."""
+    input_repository_json_configuration_path: str
+    """A path to the configuration file relative to the repository_url."""
+    transformers: list[Transformer]
+    render_templates: list[TemplateOptions]
+
+
+class TemplateOptions(TypedDict):
+    type: Literal['settings', 'schema']
+    template_path: str
+    output_path: str
+
+
+class TransformerJson(TypedDict):
+    type: Literal['jq']
+    options: str
+
+
+class TransformerPrependKeys(TypedDict):
+    type: Literal['prepend_keys']
+    options: Any
+
+
+class TransformerRemoveKeys(TypedDict):
+    type: Literal['remove_keys']
+    options: list[str]
+
+
+Transformer = TransformerJson | TransformerPrependKeys | TransformerRemoveKeys
 
 
 def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: str) -> Path:
@@ -101,7 +130,22 @@ def get_parent_directory(zip_file: zipfile.ZipFile) -> str | None:
     return top_levels.pop() if len(top_levels) == 1 else None
 
 
-def generate_sublime_settings(settings: dict[str, Configuration]) -> str:
+def process_transformers(data: SettingsDict, transformers: list[Transformer] | None = None) -> SettingsDict:
+    for transformer in transformers or []:
+        if transformer['type'] == 'jq':
+            options = transformer['options']
+            data = jq(options, json.dumps(data))
+        elif transformer['type'] == 'prepend_keys':
+            options = transformer['options']
+            data = {**options, **data}
+        elif transformer['type'] == 'remove_keys':
+            for key in transformer['options']:
+                if key in data:
+                    data.pop(key)
+    return data
+
+
+def generate_sublime_settings(settings: SettingsDict) -> str:
     sublime_settings: list[str] = []
     for key, value in settings.items():
         if description := get_description(value):
@@ -114,7 +158,7 @@ def generate_sublime_settings(settings: dict[str, Configuration]) -> str:
     return '\n'.join(sublime_settings)
 
 
-def get_description(value: Configuration) -> str | None:
+def get_description(value: Setting) -> str | None:
     if 'markdownDescription' in value:
         return value['markdownDescription']
     if 'description' in value:
@@ -125,7 +169,7 @@ def get_description(value: Configuration) -> str | None:
     return None
 
 
-def get_default_value(key: str, value: Configuration) -> Any:
+def get_default_value(key: str, value: Setting) -> Any:
     if 'default' in value:
         return value['default']
     print(f'warning: adding null default value for {key} due to no default value specified')
@@ -140,27 +184,12 @@ def get_default_value(key: str, value: Configuration) -> Any:
     return None
 
 
-def override_settings(settings: ConfigurationsDict, overrides: SchemaOverrides) -> ConfigurationsDict:
-    # Remove
-    remove = overrides.get('remove', [])
-    for key in list(settings.keys()):
-        if key in remove:
-            settings.pop(key)
-    # Transform
-    transform = overrides.get('transform', [])
-    for query in transform:
-        settings = jq(query, json.dumps(settings))
-    # Add (always at the beginning)
-    add = overrides.get('add', {})
-    return {**add, **settings}
-
-
 def compare_settings(
-    settings_1: ConfigurationsDict, settings_2: ConfigurationsDict
-) -> tuple[dict[str, Configuration], dict[str, Configuration], list[str]]:
+    settings_1: SettingsDict, settings_2: SettingsDict
+) -> tuple[SettingsDict, SettingsDict, list[str]]:
     # Find added, removed and changed keys.
-    added: dict[str, Configuration] = {}
-    changed: dict[str, Configuration] = {}
+    added: SettingsDict = {}
+    changed: SettingsDict = {}
     removed: list[str] = [key for key in settings_1 if key not in settings_2]
     for key, value in settings_2.items():
         if key not in settings_1:
@@ -171,9 +200,9 @@ def compare_settings(
     return (added, changed, removed)
 
 
-def jq(query: str, contents: str) -> ConfigurationsDict:
+def jq(query: str, contents: str) -> SettingsDict:
     try:
-        return cast('ConfigurationsDict',
+        return cast('SettingsDict',
                     json.loads(subprocess.check_output(['jq', query], input=contents, text=True, encoding='utf-8')))  # noqa: S607
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f'Error running jq command: {e.cmd} for input:\n{contents}') from e
@@ -196,66 +225,81 @@ def markdown_collapsible_section(summary: str, contents: str) -> str:
 def main() -> None:
 
     class CmdLineArgs(argparse.Namespace):
-        repository_url: str
-        configuration_file_path: str
-        configuration_jq_query: str
+        tag_from: str  # repurposed as tag_to when tag_to is omitted
+        tag_to: str | None
+        config: str
         output_schema_path: str | None
         output_settings_path: str | None
-        schema_overrides_path: str
-        tag_from: str
-        tag_to: str
 
     parser = argparse.ArgumentParser(description='Checks for differences in configuration between two tags')
-    parser.add_argument('repository_url',
-                        help='The github URL to the repository that contains the configuration to check file..')
-    parser.add_argument('configuration_file_path',
-                        help='A path to the configuration file relative to the repository_url.')
-    parser.add_argument('configuration_jq_query',
-                        help='The JQ query to use to retrieve configuration settings.')
-    parser.add_argument('--schema-overrides-path',
-                        default='sublime-package.overrides.json',
+    parser.add_argument('tag_from', help='From tag, or to tag if tag_to is not specified.')
+    parser.add_argument('tag_to', nargs='?', default=None, help='To tag.')
+    parser.add_argument('--config',
+                        default='settings-processor.json',
                         help='A path to file with augmentation used to transform the full schema.')
     parser.add_argument('--output-schema-path',
                         help='A path to file that will include whole schema if there are changes.')
     parser.add_argument('--output-settings-path',
                         help='A path to file that will include whole sublime settings if there are changes.')
-    parser.add_argument('tag_from', help='First tag to compare.')
-    parser.add_argument('tag_to', help='Second tag to compare.')
     args = parser.parse_args(namespace=CmdLineArgs())
 
-    repository_url = args.repository_url
-    configuration_file_path = args.configuration_file_path
-    configuration_jq_query = args.configuration_jq_query
-    schema_overrides_path = Path(args.schema_overrides_path)
-    tag_from = args.tag_from
-    tag_to = args.tag_to
+    config_path = Path(args.config)
+    tag_from = args.tag_from if args.tag_to is not None else None
+    tag_to = args.tag_to if args.tag_to is not None else args.tag_from
+
+    config: Config = json.loads(config_path.read_text(encoding='utf-8'))
+    repository_url = config['input_repository_url']
+    configuration_file_path = config['input_repository_json_configuration_path']
 
     with tempfile.TemporaryDirectory() as tempdir:
-        archive_path_1 = download_github_artifact_by_tag(repository_url, tag_from, tempdir)
-        configuration_1 = read_configuration_file(archive_path_1, configuration_file_path, tempdir)
         archive_path_2 = download_github_artifact_by_tag(repository_url, tag_to, tempdir)
         configuration_2 = read_configuration_file(archive_path_2, configuration_file_path, tempdir)
 
-        diff = '\n'.join(difflib.unified_diff(
-            configuration_1.split('\n'),
-            configuration_2.split('\n'),
-            fromfile=tag_from,
-            tofile=tag_to,
-            lineterm=''))
+        if tag_from is not None:
+            archive_path_1 = download_github_artifact_by_tag(repository_url, tag_from, tempdir)
+            configuration_1 = read_configuration_file(archive_path_1, configuration_file_path, tempdir)
+
+            diff = '\n'.join(difflib.unified_diff(
+                configuration_1.split('\n'),
+                configuration_2.split('\n'),
+                fromfile=tag_from,
+                tofile=tag_to,
+                lineterm=''))
+        else:
+            configuration_1 = None
+            diff = None
 
         schema_url = f'{repository_url}/blob/{tag_to}/{configuration_file_path}'
         output: list[str] = [
             (f'Following are the [settings schema]({schema_url}) changes between tags `{tag_from}` and `{tag_to}`. '
             'Make sure that those are reflected in the package settings and `sublime-package.json`.\n')
+            if tag_from is not None else
+            (f'Following is the [settings schema]({schema_url}) for tag `{tag_to}`.\n')
         ]
 
+        transformers = config.get('transformers')
+        settings_2 = process_transformers(json.loads(configuration_2), transformers)
+        full_settings = generate_sublime_settings(settings_2)
+        full_schema = json_serialize(settings_2)
+
+        if templates := config.get('render_templates', []):
+            jinja_env = jinja2.Environment(autoescape=False)  # noqa: S701
+            for template in templates:
+                tpl = jinja_env.from_string(Path(template['template_path']).read_text(encoding='utf-8'))
+                settings = full_settings if template['type'] == 'settings' else full_schema
+                Path(template['output_path']).write_text(tpl.render(settings=settings), encoding='utf-8')
+                output.append(f'Generated {template['output_path']}')
+        if args.output_schema_path:
+            target_path = Path(args.output_schema_path)
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text(full_schema, encoding='utf-8')
+        if args.output_settings_path:
+            target_path = Path(args.output_settings_path)
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text(full_settings, encoding='utf-8')
+
         if diff:
-            settings_1 = jq(configuration_jq_query, configuration_1)
-            settings_2 = jq(configuration_jq_query, configuration_2)
-            if schema_overrides_path.is_file():
-                overrides = json.loads(schema_overrides_path.read_text(encoding='utf-8'))
-                settings_1 = override_settings(settings_1, overrides)
-                settings_2 = override_settings(settings_2, overrides)
+            settings_1 = process_transformers(json.loads(configuration_1), transformers)  # type: ignore[arg-type]
             added, changed, removed = compare_settings(settings_1, settings_2)
 
             if added:
@@ -272,25 +316,14 @@ def main() -> None:
                 key_list = '\n'.join([f' - `{k}`' for k in removed])
                 output.append(f'Removed keys (${len(key_list)}):\n{key_list}')
 
-            full_settings = generate_sublime_settings(settings_2)
-            full_schema = json_serialize(settings_2)
-
             output.extend((
                 markdown_collapsible_section('All changes in the configuration file', f'```diff\n{diff}\n```'),
             ))
-
-            if args.output_schema_path:
-                target_path = Path(args.output_schema_path)
-                target_path.parent.mkdir(parents=True, exist_ok=True)
-                target_path.write_text(full_schema, encoding='utf-8')
-            if args.output_settings_path:
-                target_path = Path(args.output_settings_path)
-                target_path.parent.mkdir(parents=True, exist_ok=True)
-                target_path.write_text(full_settings, encoding='utf-8')
-        else:
+        elif diff is not None:
             output.append('No changes')
 
         print('\n\n'.join(output))
 
 
-main()
+if __name__ == '__main__':
+    main()
