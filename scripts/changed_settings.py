@@ -148,13 +148,16 @@ def process_transformers(data: SettingsDict, transformers: list[Transformer] | N
 def generate_sublime_settings(settings: SettingsDict) -> str:
     sublime_settings: list[str] = []
     for key, value in settings.items():
+        if 'default' not in value:
+            print(f'warning: skipping key "{key}" in generated settings because it has no default value specified')
+            continue
         if description := get_description(value):
             wrapped_description: str = '\n'.join([f'// {line}'.rstrip() for line in description.splitlines()])
             sublime_settings.append(
-                f'{wrapped_description}\n"{key}": {json_serialize(get_default_value(key, value), indent='\t')},')
+                f'{wrapped_description}\n"{key}": {json_serialize(value['default'], indent='\t')},')
         else:
             sublime_settings.append(
-                f'"{key}": {json_serialize(get_default_value(key, value), indent='\t')},')
+                f'"{key}": {json_serialize(value['default'], indent='\t')},')
     return '\n'.join(sublime_settings)
 
 
@@ -169,19 +172,19 @@ def get_description(value: Setting) -> str | None:
     return None
 
 
-def get_default_value(key: str, value: Setting) -> Any:
-    if 'default' in value:
-        return value['default']
-    print(f'warning: adding null default value for {key} due to no default value specified')
-    if value['type'] == 'object':
-        return {}
-    if isinstance(value['type'], list):
-        if 'null' in value['type']:
-            return None
-        value['type'].append('null')
-    else:
-        value['type'] = [value['type'], 'null']
-    return None
+# def get_default_value(key: str, value: Setting) -> Any:
+#     if 'default' in value:
+#         return value['default']
+#     print(f'warning: adding null default value for {key} due to no default value specified')
+#     if value['type'] == 'object':
+#         return {}
+#     if isinstance(value['type'], list):
+#         if 'null' in value['type']:
+#             return None
+#         value['type'].append('null')
+#     else:
+#         value['type'] = [value['type'], 'null']
+#     return None
 
 
 def compare_settings(
