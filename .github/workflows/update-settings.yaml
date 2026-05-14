@@ -1,0 +1,53 @@
+name: Update settings
+
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+  pull-requests: write
+  repository-projects: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          path: pr
+
+      - name: Checkout workflow repo
+        uses: actions/checkout@v6
+        with:
+          repository: sublimelsp/workflows
+          ref: v2
+          path: workflow-repo
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          working-directory: workflow-repo
+
+      - name: Run changed_settings script
+        id: changed_settings
+        working-directory: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPO_URL=$(jq -r '.input_repository_url' settings-processor.json)
+          REPO_ID="${REPO_URL#https://github.com/}"
+          LATEST_VERSION=$(gh release view --repo "$REPO_ID" --json tagName -q '.tagName')
+          echo "LATEST_VERSION: ${LATEST_VERSION}"
+          uv run --project ../workflow-repo ../workflow-repo/scripts/changed_settings.py "$LATEST_VERSION" > "$RUNNER_TEMP/changes.md"
+
+      - name: Commit and push changes
+        working-directory: pr
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git diff --staged --quiet || git commit -m "chore: update"
+          git push
