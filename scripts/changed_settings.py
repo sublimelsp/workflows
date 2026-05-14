@@ -283,7 +283,7 @@ def main() -> None:
         full_schema = json_serialize(settings_2)
 
         if templates := config.get('render_templates', []):
-            jinja_env = jinja2.Environment(autoescape=False)  # noqa: S701
+            jinja_env = jinja2.Environment(autoescape=False, keep_trailing_newline=True)  # noqa: S701
             for template in templates:
                 tpl = jinja_env.from_string(Path(template['template_path']).read_text(encoding='utf-8'))
                 settings = full_settings if template['type'] == 'settings' else full_schema
