@@ -85,5 +85,3 @@ Optional flags:
 | Flag | Default | Description |
 |---|---|---|
 | `--config` | `settings-processor.json` | Path to a JSON file with `add`, `remove`, and/or `transform` keys to augment the schema. |
-| `--output-schema-path` | _(none)_ | If set, writes the full schema JSON to this path when there are changes. |
-| `--output-settings-path` | _(none)_ | If set, writes the full Sublime Text settings to this path when there are changes. |

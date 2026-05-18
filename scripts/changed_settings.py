@@ -75,6 +75,29 @@ class TransformerRemoveKeys(TypedDict):
 Transformer = TransformerJson | TransformerPrependKeys | TransformerRemoveKeys
 
 
+class Output:
+    def __init__(self) -> None:
+        self._info: list[str] = []
+        self._warnings: list[str] = []
+
+    def info(self, message: str) -> None:
+        self._info.append(message)
+
+    def warning(self, message: str) -> None:
+        self._warnings.append(message)
+
+    def flush(self) -> None:
+        print('\n'.join(self._info))
+        self._info = []
+        if self._warnings:
+            print(markdown_collapsible_section(f'warnings ({len(self._warnings)})',
+                                               '\n'.join([f' - {w}' for w in self._warnings])))
+            self._warnings = []
+
+
+output = Output()
+
+
 def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: str) -> Path:
     archive_url = f'{repository_url}/archive/refs/tags/{tag}.zip'
     zip_path = Path(target_dir, f'archive-{re.sub(r'[<>:"/\\|?*]', '_', tag)}.zip')
@@ -149,7 +172,7 @@ def generate_sublime_settings(settings: SettingsDict) -> str:
     sublime_settings: list[str] = []
     for key, value in settings.items():
         if 'default' not in value:
-            print(f'warning: skipping key "{key}" in generated settings because it has no default value specified')
+            output.warning(f'skipping key `{key}` in generated settings because it has no default value')
             continue
         if description := get_description(value):
             wrapped_description: str = '\n'.join([f'// {line}'.rstrip() for line in description.splitlines()])
@@ -216,13 +239,13 @@ def json_serialize(contents: Any, indent: int | str = 2) -> str:
 
 
 def markdown_collapsible_section(summary: str, contents: str) -> str:
-    return f"""<details>
+    return f"""\n<details>
 
 <summary>{summary}</summary>
 
 {contents}
 
-</details>"""
+</details>\n"""
 
 
 def main() -> None:
@@ -240,10 +263,6 @@ def main() -> None:
     parser.add_argument('--config',
                         default='settings-processor.json',
                         help='A path to file with augmentation used to transform the full schema.')
-    parser.add_argument('--output-schema-path',
-                        help='A path to file that will include whole schema if there are changes.')
-    parser.add_argument('--output-settings-path',
-                        help='A path to file that will include whole sublime settings if there are changes.')
     args = parser.parse_args(namespace=CmdLineArgs())
 
     config_path = Path(args.config)
@@ -272,60 +291,53 @@ def main() -> None:
             configuration_1 = None
             diff = None
 
-        schema_url = f'{repository_url}/blob/{tag_to}/{configuration_file_path}'
-        output: list[str] = [
-            (f'Following are the [settings schema]({schema_url}) changes between tags `{tag_from}` and `{tag_to}`. '
-            'Make sure that those are reflected in the package settings and `sublime-package.json`.\n')
+        schema_url_from = f'{repository_url}/blob/{tag_from}/{configuration_file_path}'
+        schema_url_to = f'{repository_url}/blob/{tag_to}/{configuration_file_path}'
+        output.info('### Check & update settings')
+        output.info(
+            f'Checking tag range [{tag_from}]({schema_url_from})..[{tag_to}]({schema_url_to})'
             if tag_from is not None else
-            (f'Following is the [settings schema]({schema_url}) for tag `{tag_to}`.\n')
-        ]
+            f'Checking tag [{tag_to}]({schema_url_to})'
+        )
 
         transformers = config.get('transformers')
         settings_2 = process_transformers(json.loads(configuration_2), transformers)
-        full_settings = generate_sublime_settings(settings_2)
-        full_schema = json_serialize(settings_2)
-
-        if templates := config.get('render_templates', []):
-            jinja_env = jinja2.Environment(autoescape=False, keep_trailing_newline=True)  # noqa: S701
-            for template in templates:
-                tpl = jinja_env.from_string(Path(template['template_path']).read_text(encoding='utf-8'))
-                settings = full_settings if template['type'] == 'settings' else full_schema
-                Path(template['output_path']).write_text(tpl.render(settings=settings), encoding='utf-8')
-                output.append(f'Generated {template['output_path']}')
-        if args.output_schema_path:
-            target_path = Path(args.output_schema_path)
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            target_path.write_text(full_schema, encoding='utf-8')
-        if args.output_settings_path:
-            target_path = Path(args.output_settings_path)
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            target_path.write_text(full_settings, encoding='utf-8')
 
         if diff:
             settings_1 = process_transformers(json.loads(configuration_1), transformers)  # type: ignore[arg-type]
             added, changed, removed = compare_settings(settings_1, settings_2)
 
             if added:
-                output.append(markdown_collapsible_section(
+                output.info(markdown_collapsible_section(
                     f'Added keys ({len(added.keys())})',
                     f'```json\n{json_serialize(added)}\n```\n```jsonc\n{generate_sublime_settings(added)}\n```'))
 
             if changed:
-                output.append(markdown_collapsible_section(
+                output.info(markdown_collapsible_section(
                     f'Changed keys ({len(changed.keys())})',
                     f'```json\n{json_serialize(changed)}\n```\n```jsonc\n{generate_sublime_settings(changed)}\n```'))
 
             if removed:
                 key_list = '\n'.join([f' - `{k}`' for k in removed])
-                output.append(f'Removed keys (${len(key_list)}):\n{key_list}')
+                output.info(f'Removed keys (${len(key_list)}):\n{key_list}')
 
-            output.extend((
-                markdown_collapsible_section('All changes in the configuration file', f'```diff\n{diff}\n```'),
-            ))
+            output.info(markdown_collapsible_section('All changes in the configuration file', f'```diff\n{diff}\n```'))
         elif diff is not None:
-            output.append('No changes')
+            output.info('No changes')
 
-        print('\n\n'.join(output))
+        if templates := config.get('render_templates', []):
+            jinja_env = jinja2.Environment(autoescape=False, keep_trailing_newline=True)  # noqa: S701
+            for template in templates:
+                tpl = jinja_env.from_string(Path(template['template_path']).read_text(encoding='utf-8'))
+                if template['type'] == 'settings':
+                    settings = generate_sublime_settings(settings_2)
+                elif template['type'] == 'schema':
+                    settings = json_serialize(settings_2)
+                else:
+                    raise RuntimeError(f'Unknown template type "{template['type']}"')
+                Path(template['output_path']).write_text(tpl.render(settings=settings), encoding='utf-8')
+
+        output.flush()
 
 
 if __name__ == '__main__':
