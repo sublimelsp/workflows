@@ -105,6 +105,8 @@ def download_github_artifact_by_tag(repository_url: str, tag: str, target_dir: s
         with urlopen(archive_url) as response, zip_path.open('wb') as out_file:
             shutil.copyfileobj(response, out_file)
     except HTTPError as e:
+        if e.code == 404:
+            raise SystemExit(f'Tag {tag!r} not found (HTTP 404): {archive_url}') from None
         raise RuntimeError(f'HTTP {e.code}, fetching {archive_url!r}: {e.reason}') from e
     return zip_path
 
