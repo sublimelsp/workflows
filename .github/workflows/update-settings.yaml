@@ -1,0 +1,78 @@
+name: Update settings
+
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+  pull-requests: write
+  repository-projects: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          path: pr
+
+      - name: Checkout workflow repo
+        uses: actions/checkout@v6
+        with:
+          repository: sublimelsp/workflows
+          ref: v2
+          path: workflow-repo
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          working-directory: workflow-repo
+
+      - name: Run changed_settings script
+        id: changed_settings
+        working-directory: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPO_URL=$(jq -r '.input_repository_url' settings-processor.json)
+          REPO_ID="${REPO_URL#https://github.com/}"
+          LATEST_VERSION=$(gh release view --repo "$REPO_ID" --json tagName -q '.tagName')
+          echo "LATEST_VERSION: ${LATEST_VERSION}"
+          uv run --project ../workflow-repo ../workflow-repo/scripts/changed_settings.py "$LATEST_VERSION" > "$RUNNER_TEMP/changes.md"
+
+      - name: Check for changes
+        id: settings-changed-check
+        run: |
+          if grep -q "No changes" "$RUNNER_TEMP/changes.md"; then
+            echo "settings_changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "settings_changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.settings-changed-check.outputs.settings_changed == 'true'
+        name: Commit and push changes
+        working-directory: pr
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git diff --staged --quiet || git commit -m "chore: update"
+          git push
+
+      - name: Find Comment
+        uses: peter-evans/find-comment@v4
+        id: find-comment
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+
+      - name: Create or update comment
+        uses: peter-evans/create-or-update-comment@v5
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body-path: ${{ runner.temp }}/changes.md
+          edit-mode: replace
