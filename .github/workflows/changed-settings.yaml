@@ -48,7 +48,7 @@ jobs:
           sudo apt-get install -y ripgrep
 
       - name: Checkout default branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch }}
 
@@ -60,7 +60,7 @@ jobs:
         run: echo "version=$(rg -o "$VERSION" -r "\$1" "$FILE")" >> "$GITHUB_OUTPUT"
 
       - name: Checkout PR
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
           path: pr
@@ -78,7 +78,7 @@ jobs:
 
       - if: steps.version-check.outputs.version_changed == 'true'
         name: Checkout workflow repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: sublimelsp/workflows
           ref: v2
