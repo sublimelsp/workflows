@@ -27,7 +27,7 @@ jobs:
           path: workflow-repo
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.3.0
         with:
           working-directory: workflow-repo
 
