@@ -42,17 +42,37 @@ Outputs: `version_changed`, `new_version`, `settings_changed`.
 
 ### Update Settings
 
-`update-settings.yaml` takes no inputs. It looks up the latest release of the upstream repository (via `gh release view`) using `input_repository_url` from `settings-processor.json`, regenerates the settings for that tag, commits any changes to the PR branch, and posts a comment.
+`update-settings.yaml` takes no inputs. It looks up the latest release of the upstream repository (via `gh release view`) using `input_repository_url` from `settings-processor.json` and regenerates the settings for that tag. Instead of pushing the changes to the PR, it:
+
+- force-pushes them to `settings/<branch>` and opens a PR (or updates it) with the PR's branch as its base, so that they can be reviewed. The PR is created with the SublimeLSP App token, so CI runs on it.
+- comments on the PR with a link to the settings PR and the script output.
+- fails while the settings need changes, so that Renovate doesn't automerge the update. Merging the settings PR into the PR's branch runs the workflow again, which then passes.
+- closes the settings PR when the settings no longer need changes.
+
+When run from `workflow_dispatch`, the settings PR is opened against the branch the workflow runs on. For PRs from forks, which get no secrets, it only fails the check, with the script output in the job summary.
+
+The caller has to pass the `SUBLIMELSP_APP_PRIVATE_KEY` organization secret, and only that one, rather than all secrets with `secrets: inherit`. The app's client ID is read from the `SUBLIMELSP_APP_CLIENT_ID` organization variable.
 
 ```yaml
 name: Update settings
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'language-server/package.json'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
-  update:
-    uses: sublimelsp/workflows/.github/workflows/update-settings.yaml@v2
+  update-settings:
+    uses: sublimelsp/workflows/.github/workflows/update-settings.yaml@v3
+    secrets:
+      SUBLIMELSP_APP_PRIVATE_KEY: ${{ secrets.SUBLIMELSP_APP_PRIVATE_KEY }}
 ```
 
 ## Configuration
