@@ -51,7 +51,7 @@ Outputs: `version_changed`, `new_version`, `settings_changed`.
 
 When run from `workflow_dispatch`, the settings PR is opened against the branch the workflow runs on. For PRs from forks, which get no secrets, it only fails the check, with the script output in the job summary.
 
-The caller has to pass the `SUBLIMELSP_APP_PRIVATE_KEY` secret with `secrets: inherit`. The app's client ID is read from the `SUBLIMELSP_APP_CLIENT_ID` organization variable.
+The caller has to pass the `SUBLIMELSP_APP_PRIVATE_KEY` organization secret, and only that one, rather than all secrets with `secrets: inherit`. The app's client ID is read from the `SUBLIMELSP_APP_CLIENT_ID` organization variable.
 
 ```yaml
 name: Update settings
@@ -71,7 +71,8 @@ permissions:
 jobs:
   update-settings:
     uses: sublimelsp/workflows/.github/workflows/update-settings.yaml@v3
-    secrets: inherit
+    secrets:
+      SUBLIMELSP_APP_PRIVATE_KEY: ${{ secrets.SUBLIMELSP_APP_PRIVATE_KEY }}
 ```
 
 ## Configuration

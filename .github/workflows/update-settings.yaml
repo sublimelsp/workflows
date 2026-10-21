@@ -4,7 +4,7 @@ on:
   workflow_call:
     secrets:
       SUBLIMELSP_APP_PRIVATE_KEY:
-        description: "Private key of the SublimeLSP App, which opens the settings PR. Pass it with `secrets: inherit`."
+        description: Private key of the SublimeLSP App, which opens the settings PR.
         required: false
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
           HAS_KEY: ${{ secrets.SUBLIMELSP_APP_PRIVATE_KEY != '' }}
         run: |
           if [ "$HAS_KEY" != 'true' ]; then
-            echo "::error::SUBLIMELSP_APP_PRIVATE_KEY is not available. Call this workflow with \`secrets: inherit\`."
+            echo "::error::SUBLIMELSP_APP_PRIVATE_KEY is not available. Pass it to this workflow in \`secrets\`."
             exit 1
           fi
 
