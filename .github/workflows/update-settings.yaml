@@ -2,28 +2,62 @@ name: Update settings
 
 on:
   workflow_call:
+    secrets:
+      SUBLIMELSP_APP_PRIVATE_KEY:
+        description: "Private key of the SublimeLSP App, which opens the settings PR. Pass it with `secrets: inherit`."
+        required: false
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
-  repository-projects: write
 
 jobs:
   update:
+    # The settings PR is stacked on top of the PR, so this workflow must not run for it.
+    if: ${{ !startsWith(github.head_ref, 'settings/') }}
     runs-on: ubuntu-latest
+    env:
+      # PRs from forks get a read-only token and no secrets, so the settings PR and the comment are skipped for them.
+      IS_FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      # The branch to stack the settings PR on: the PR's branch, or the branch the workflow was dispatched on.
+      BRANCH: ${{ github.head_ref || github.ref_name }}
+      SETTINGS_BRANCH: settings/${{ github.head_ref || github.ref_name }}
 
     steps:
+      - name: Check for the app key
+        if: env.IS_FORK == 'false'
+        env:
+          HAS_KEY: ${{ secrets.SUBLIMELSP_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [ "$HAS_KEY" != 'true' ]; then
+            echo "::error::SUBLIMELSP_APP_PRIVATE_KEY is not available. Call this workflow with \`secrets: inherit\`."
+            exit 1
+          fi
+
+      # Pushes and PRs made with GITHUB_TOKEN don't trigger workflows, so the settings PR wouldn't get CI.
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        if: env.IS_FORK == 'false'
+        with:
+          client-id: ${{ vars.SUBLIMELSP_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SUBLIMELSP_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Checkout PR
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
           path: pr
 
+      # The same commit as this workflow, so that the script matches it.
       - name: Checkout workflow repo
         uses: actions/checkout@v7
         with:
-          repository: sublimelsp/workflows
-          ref: v2
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: workflow-repo
 
       - name: Setup uv
@@ -32,7 +66,7 @@ jobs:
           working-directory: workflow-repo
 
       - name: Run changed_settings script
-        id: changed_settings
+        id: changed-settings
         working-directory: pr
         env:
           GH_TOKEN: ${{ github.token }}
@@ -42,37 +76,89 @@ jobs:
           LATEST_VERSION=$(gh release view --repo "$REPO_ID" --json tagName -q '.tagName')
           echo "LATEST_VERSION: ${LATEST_VERSION}"
           uv run --project ../workflow-repo ../workflow-repo/scripts/changed_settings.py "$LATEST_VERSION" > "$RUNNER_TEMP/changes.md"
+          cat "$RUNNER_TEMP/changes.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$(git status --porcelain)" ]; then echo 'changed=true'; else echo 'changed=false'; fi >> "$GITHUB_OUTPUT"
 
-      - name: Check for changes
-        id: settings-changed-check
+      - name: Create or update settings PR
+        id: settings-pr
+        if: env.IS_FORK == 'false' && steps.changed-settings.outputs.changed == 'true'
+        working-directory: pr
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          if grep -q "No changes" "$RUNNER_TEMP/changes.md"; then
-            echo "settings_changed=false" >> "$GITHUB_OUTPUT"
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add --all
+          git commit -m 'chore: update settings'
+          git push --force origin "HEAD:refs/heads/$SETTINGS_BRANCH"
+          target=${PR_NUMBER:+#$PR_NUMBER}
+          target=${target:-$BRANCH}
+          {
+            echo "Settings changes for $target. Review them, then merge this PR before $target."
+            echo
+            echo "This branch is regenerated when $target is updated, which overwrites any changes pushed to it."
+            echo
+            cat "$RUNNER_TEMP/changes.md"
+          } > "$RUNNER_TEMP/body.md"
+          number=$(gh pr list --head "$SETTINGS_BRANCH" --base "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --body-file "$RUNNER_TEMP/body.md"
           else
-            echo "settings_changed=true" >> "$GITHUB_OUTPUT"
+            url=$(gh pr create --head "$SETTINGS_BRANCH" --base "$BRANCH" --title "chore: update settings for $target" --body-file "$RUNNER_TEMP/body.md")
+            number=${url##*/}
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Close stale settings PR
+        if: env.IS_FORK == 'false' && steps.changed-settings.outputs.changed == 'false'
+        working-directory: pr
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          number=$(gh pr list --head "$SETTINGS_BRANCH" --base "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh pr close "$number" --delete-branch --comment "No settings changes needed anymore."
           fi
 
-      - if: steps.settings-changed-check.outputs.settings_changed == 'true'
-        name: Commit and push changes
-        working-directory: pr
+      - name: Write comment
+        if: env.IS_FORK == 'false' && env.PR_NUMBER != ''
+        env:
+          SETTINGS_PR: ${{ steps.settings-pr.outputs.number }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add --all
-          git diff --staged --quiet || git commit -m "chore: update"
-          git push
+          {
+            if [ -n "$SETTINGS_PR" ]; then
+              echo "Settings changes are in #$SETTINGS_PR. Review and merge it before merging this PR."
+            else
+              echo 'No changes to the settings.'
+            fi
+            echo
+            cat "$RUNNER_TEMP/changes.md"
+          } > "$RUNNER_TEMP/comment.md"
 
       - name: Find Comment
         uses: peter-evans/find-comment@v4
         id: find-comment
+        if: env.IS_FORK == 'false' && env.PR_NUMBER != ''
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: 'github-actions[bot]'
 
       - name: Create or update comment
         uses: peter-evans/create-or-update-comment@v5
+        if: env.IS_FORK == 'false' && env.PR_NUMBER != ''
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
-          body-path: ${{ runner.temp }}/changes.md
+          body-path: ${{ runner.temp }}/comment.md
           edit-mode: replace
+
+      # So that Renovate doesn't automerge an update whose settings need review.
+      - name: Fail if the settings need review
+        if: steps.changed-settings.outputs.changed == 'true'
+        run: |
+          if [ "$IS_FORK" = 'true' ]; then
+            echo "::error::The settings need to be updated, see the job summary."
+          else
+            echo "::error::The settings need review, see the settings PR."
+          fi
+          exit 1
