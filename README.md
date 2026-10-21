@@ -8,7 +8,9 @@ Both workflows read a `settings-processor.json` config file (see [Configuration]
 
 ### Changed Settings
 
-`changed-settings.yaml` runs on a pull request. It extracts the upstream version from a file on the default branch and on the PR branch, and - if the version changed - regenerates the settings, commits the result to the PR, and posts a diff as a PR comment.
+`changed-settings.yaml` runs on a pull request. It extracts the upstream version from a file on the default branch and on the PR branch, and - if the version changed - regenerates the settings and posts a diff as a PR comment. It handles the regenerated settings like [Update Settings](#update-settings): instead of pushing them to the PR, it opens a stacked settings PR and fails while the settings need changes.
+
+The caller has to pass the `SUBLIMELSP_APP_PRIVATE_KEY` organization secret, and only that one, rather than all secrets with `secrets: inherit`.
 
 ```yaml
 name: Check settings
@@ -18,9 +20,13 @@ on:
     branches:
     - main
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   check-settings:
-    uses: sublimelsp/workflows/.github/workflows/changed-settings.yaml@v2
+    uses: sublimelsp/workflows/.github/workflows/changed-settings.yaml@v3
     with:
       # Repo-relative path to the file that contains the upstream version.
       version_file: 'plugin.py'
@@ -28,6 +34,8 @@ jobs:
       version_regexp: 'TAG = "([^"]+)"'
       # Optional. Transforms the captured tag; `{}` is replaced with the tag (e.g. to prepend a 'v').
       version_transform: 'v{}'
+    secrets:
+      SUBLIMELSP_APP_PRIVATE_KEY: ${{ secrets.SUBLIMELSP_APP_PRIVATE_KEY }}
 ```
 
 Inputs:
@@ -38,7 +46,7 @@ Inputs:
 | `version_regexp` | yes | - | Regexp pattern to extract the version. The first capturing group must match the release tag in the upstream repository. |
 | `version_transform` | no | `{}` | String used to transform the captured tag. `{}` is replaced with the captured tag. |
 
-Outputs: `version_changed`, `new_version`, `settings_changed`.
+Outputs: `version_changed`, `new_version`, `settings_changed`. `settings_changed` tells whether the settings differ between the two upstream versions, not whether the PR still needs a settings PR. Since the job fails while the settings PR is open, a job that `needs` this one only runs once it is merged, unless it uses `if: ${{ !cancelled() }}`.
 
 ### Update Settings
 
